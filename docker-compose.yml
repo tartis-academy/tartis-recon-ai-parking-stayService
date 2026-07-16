@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:15.18-alpine
+    container_name: parking-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports: 
+      "${POSTGRES_PORT:-5432}:5432"
+  volumes:
+      parking-postgres-data:/var/lib/postgresql/data
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+  interval: 5s
+  timeout: 3s
+  retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:9.16
+    container_name: parking-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      
+      "${PGADMIN_PORT:-5050}:80"
+  depends_on:
+    postgres:
+      condition: service_healthy
+  volumes:
+    parking-pgadmin-data:/var/lib/pgadmin
+
+volumes:
+  parking-postgres-data:
+  parking-pgadmin-data:

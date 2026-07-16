@@ -1,0 +1,40 @@
+# Auto detecta text files y normaliza a LF en el repo
+* text=auto eol=lf
+
+# Fuerza LF explícitamente en código fuente
+*.java text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.properties text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.gradle text eol=lf
+
+# Scripts .bat necesitan CRLF sí o sí en Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: que Git no los toque ni intente diff
+*.jar binary
+*.war binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+
+# Marca los lock files como generados, para que no se muestren en diffs de PRs por defecto en algunas herramientas
+package-lock.json linguist-generated=true
+yarn.lock linguist-generated=true
