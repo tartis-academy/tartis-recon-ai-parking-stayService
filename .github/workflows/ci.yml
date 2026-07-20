@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, release]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend/stay-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # TODO: quitar -DskipTests (y anadir Postgres como service container)
+      # cuando el dominio de stay-service este implementado. Hoy StayEntity
+      # es una clase vacia sin @Entity/@Id.
+      - name: Build
+        run: ./mvnw -B verify -DskipTests
