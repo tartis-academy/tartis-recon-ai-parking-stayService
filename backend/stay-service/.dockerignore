@@ -1,0 +1,7 @@
+# Sin esto, el contexto de build se llevaria target/ (jars viejos) y .env
+# (credenciales) dentro de la imagen.
+target/
+.env
+.git
+*.md
+docker-compose.yml
