@@ -49,18 +49,14 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      # Falla el job si no se cumple el quality gate (sonar.qualitygate.wait
-      # espera el resultado antes de continuar). Requiere el secret SONAR_TOKEN
-      # del repo (proyecto en SonarCloud, organizacion tartis-academy).
-      # AJUSTAR sonar.projectKey/organization si difieren de los que se creen
-      # en SonarCloud.
+      # Requiere el secret SONAR_TOKEN del repo.
       - name: Analisis SonarCloud (quality gate)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >
           ./mvnw -B sonar:sonar
-          -Dsonar.projectKey=tartis-academy_tartis-recon-ai-parking-stayService
-          -Dsonar.organization=tartis-academy
+          -Dsonar.projectKey=1dd0rv_tartis-recon-ai-parking-stayService
+          -Dsonar.organization=1dd0rv
           -Dsonar.host.url=https://sonarcloud.io
           -Dsonar.qualitygate.wait=true
