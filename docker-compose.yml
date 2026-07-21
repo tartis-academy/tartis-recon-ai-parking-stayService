@@ -1,6 +1,6 @@
 # Postgres dedicado de stay-service (database-per-service, perfil prod o
 # servicio aislado). El Postgres compartido del dia a dia en dev vive en el
-# repo de vehicle-service (./setup.sh). Ver Convenciones del proyecto Parking S4.
+# repo de infra (./setup.sh). Ver Convenciones del proyecto Parking S4.
 #
 #   docker network create parking-shared   (una vez)
 
