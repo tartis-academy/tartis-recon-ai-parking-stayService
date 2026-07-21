@@ -29,7 +29,11 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          # El pom compila a bytecode 17 (maven.compiler source/target) pero el
+          # runner usa 21: SonarQube Cloud dejo de soportar analizar con JDK 17
+          # desde julio 2026. Lombok 1.18.30 soporta 21 sin problema (el limite
+          # documentado es JDK 25).
+          java-version: '21'
           distribution: 'temurin'
           cache: maven
 
