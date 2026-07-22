@@ -22,12 +22,12 @@ class StayRepositoryTest {
     private StayRepository repository;
 
     @Test
-    void existsByPlateAndStatus_ShouldReturnTrue_WhenRecordExists() {
+    void existsByVehicleIdAndStatus_ShouldReturnTrue_WhenRecordExists() {
         // Arrange
-        UUID id = UUID.randomUUID();
+        UUID vehicleId = UUID.randomUUID();
         StayEntity entity = new StayEntity(
-                id,
-                "7777CCC",
+                UUID.randomUUID(),
+                vehicleId,
                 VehicleType.CAR,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -39,20 +39,20 @@ class StayRepositoryTest {
         repository.save(entity);
 
         // Act & Assert
-        boolean exists = repository.existsByPlateAndStatus("7777CCC", StayStatus.IN_PROGRESS);
+        boolean exists = repository.existsByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS);
         assertTrue(exists);
 
-        boolean notExists = repository.existsByPlateAndStatus("7777CCC", StayStatus.FINISHED);
+        boolean notExists = repository.existsByVehicleIdAndStatus(vehicleId, StayStatus.FINISHED);
         assertFalse(notExists);
     }
 
     @Test
-    void findByPlateAndStatus_ShouldReturnEntity_WhenRecordExists() {
+    void findByVehicleIdAndStatus_ShouldReturnEntity_WhenRecordExists() {
         // Arrange
-        UUID id = UUID.randomUUID();
+        UUID vehicleId = UUID.randomUUID();
         StayEntity entity = new StayEntity(
-                id,
-                "8888DDD",
+                UUID.randomUUID(),
+                vehicleId,
                 VehicleType.CAR,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -64,10 +64,10 @@ class StayRepositoryTest {
         repository.save(entity);
 
         // Act
-        Optional<StayEntity> found = repository.findByPlateAndStatus("8888DDD", StayStatus.IN_PROGRESS);
+        Optional<StayEntity> found = repository.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS);
 
         // Assert
         assertTrue(found.isPresent());
-        assertEquals("8888DDD", found.get().getPlate());
+        assertEquals(vehicleId, found.get().getVehicleId());
     }
 }

@@ -25,8 +25,8 @@ public class StayEntity {
     @Column(name = "unique_id", nullable = false, updatable = false)
     private UUID uniqueId;
 
-    @Column(name = "plate", nullable = false, length = 15)
-    private String plate;
+    @Column(name = "vehicle_id", nullable = false)
+    private UUID vehicleId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "vehicle_type", nullable = false, length = 20)
@@ -55,9 +55,9 @@ public class StayEntity {
         // Requerido por JPA/Hibernate.
     }
 
-    public StayEntity(UUID uniqueId, String plate, VehicleType vehicleType, UUID spotId,UUID tariffId, Instant checkIn, Instant checkOut,BigDecimal totalAmount, StayStatus status) {
+    public StayEntity(UUID uniqueId, UUID vehicleId, VehicleType vehicleType, UUID spotId,UUID tariffId, Instant checkIn, Instant checkOut,BigDecimal totalAmount, StayStatus status) {
         this.uniqueId = uniqueId;
-        this.plate = plate;
+        this.vehicleId = vehicleId;
         this.vehicleType = vehicleType;
         this.spotId = spotId;
         this.tariffId = tariffId;
@@ -75,12 +75,12 @@ public class StayEntity {
         this.uniqueId = uniqueId;
     }
 
-    public String getPlate() {
-        return plate;
+    public UUID getVehicleId() {
+        return vehicleId;
     }
 
-    public void setPlate(String plate) {
-        this.plate = plate;
+    public void setVehicleId(UUID vehicleId) {
+        this.vehicleId = vehicleId;
     }
 
     public VehicleType getVehicleType() {

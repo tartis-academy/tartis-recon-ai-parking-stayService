@@ -25,7 +25,7 @@ public interface StayPersistenceMapper {
         }
         return Stay.restore(
                 entity.getUniqueId(),
-                entity.getPlate(),
+                entity.getVehicleId(),
                 entity.getVehicleType(),
                 entity.getSpotId(),
                 entity.getTariffId(),

@@ -21,23 +21,25 @@ class StayPersistenceMapperTest {
     @Test
     void toEntity_ShouldMapDomainToEntityCorrectly() {
         UUID id = UUID.randomUUID();
-        Stay stay = Stay.checkIn(id, "9999XYZ", VehicleType.MOTORBIKE, UUID.randomUUID(), UUID.randomUUID(), Instant.now());
+        UUID vehicleId = UUID.randomUUID();
+        Stay stay = Stay.checkIn(id, vehicleId, VehicleType.MOTORBIKE, UUID.randomUUID(), UUID.randomUUID(), Instant.now());
 
         StayEntity entity = mapper.toEntity(stay);
 
         assertNotNull(entity);
         assertEquals(id, entity.getUniqueId());
-        assertEquals("9999XYZ", entity.getPlate());
+        assertEquals(vehicleId, entity.getVehicleId());
         assertEquals(VehicleType.MOTORBIKE, entity.getVehicleType());
     }
 
     @Test
     void toDomain_ShouldMapEntityToDomainCorrectly() {
         UUID id = UUID.randomUUID();
+        UUID vehicleId = UUID.randomUUID();
         Instant now = Instant.now();
         StayEntity entity = new StayEntity(
                 id,
-                "9999XYZ",
+                vehicleId,
                 VehicleType.MOTORBIKE,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -51,7 +53,7 @@ class StayPersistenceMapperTest {
 
         assertNotNull(stay);
         assertEquals(id, stay.getId());
-        assertEquals("9999XYZ", stay.getPlate());
+        assertEquals(vehicleId, stay.getVehicleId());
         assertEquals(StayStatus.IN_PROGRESS, stay.getStatus());
     }
 
