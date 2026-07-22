@@ -10,11 +10,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -26,45 +26,59 @@ class StayTariffClientAdapterTest {
 
     @BeforeEach
     void setUp() {
+        // 1. Crear un RestClient.Builder manual sin levantar contexto de Spring
         RestClient.Builder builder = RestClient.builder();
+
+        // 2. Vincular el MockRestServiceServer al builder para interceptar peticiones HTTP
         server = MockRestServiceServer.bindTo(builder).build();
-        stayTariffClientAdapter = new StayTariffClientAdapter(builder, "http://tariff-service:8080");
+
+        // 3. Instanciar el adaptador inyectándole el builder mockeado
+        stayTariffClientAdapter = new StayTariffClientAdapter(builder);
     }
 
     @Test
-    void shouldGetActiveTariffId() {
+    void shouldGetActiveTariffIdSuccessfully() {
         // GIVEN
         UUID expectedTariffId = UUID.randomUUID();
-        String jsonResponse = "{\"id\": \"" + expectedTariffId + "\"}";
+
+        // El endpoint /v1/tariffs/active devuelve una lista JSON [...]
+        String jsonResponse = """
+                [
+                    {
+                        "id": "%s",
+                        "vehicleType": "CAR",
+                        "active": true
+                    }
+                ]
+                """.formatted(expectedTariffId);
 
         server.expect(requestTo("http://tariff-service:8080/v1/tariffs/active?type=CAR"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN
-        UUID actualTariffId = stayTariffClientAdapter.getActiveTariffId(VehicleType.CAR);
+        UUID resultTariffId = stayTariffClientAdapter.getActiveTariffId(VehicleType.CAR);
 
         // THEN
-        assertEquals(expectedTariffId, actualTariffId);
+        assertNotNull(resultTariffId);
+        assertEquals(expectedTariffId, resultTariffId);
         server.verify();
     }
 
     @Test
-    void shouldCalculateAmount() {
+    void shouldThrowExceptionWhenNoActiveTariffFound() {
         // GIVEN
-        UUID tariffId = UUID.randomUUID();
-        Instant checkIn = Instant.parse("2026-03-30T10:00:00Z");
-        Instant checkOut = Instant.parse("2026-03-30T12:00:00Z");
-        String jsonResponse = "{\"amount\": 15.50}";
+        String emptyJsonResponse = "[]";
 
-        server.expect(requestTo("http://tariff-service:8080/v1/tariffs/" + tariffId + "/calculate"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+        server.expect(requestTo("http://tariff-service:8080/v1/tariffs/active?type=MOTORBIKE"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess(emptyJsonResponse, MediaType.APPLICATION_JSON));
 
-        // WHEN
-        BigDecimal amount = stayTariffClientAdapter.calculateAmount(tariffId, checkIn, checkOut);
+        // WHEN & THEN
+        assertThrows(IllegalStateException.class, () -> 
+            stayTariffClientAdapter.getActiveTariffId(VehicleType.MOTORBIKE)
+        );
 
-        assertEquals(0, new BigDecimal("15.50").compareTo(amount));
         server.verify();
     }
 }

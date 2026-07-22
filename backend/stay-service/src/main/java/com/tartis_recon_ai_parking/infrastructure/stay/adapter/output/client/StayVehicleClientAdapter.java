@@ -2,12 +2,14 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.VehicleResponse;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
-import java.util.UUID;
 
 @Component
 public class StayVehicleClientAdapter implements StayVehiclePort {
@@ -21,26 +23,40 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
         this.restClient = builder.baseUrl(vehicleServiceUrl).build();
     }
 
+
     @Override
-    public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
-        Map<?, ?> response = restClient.post()
-                .uri("/v1/vehicles/resolve")
+public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
+    VehicleResponse response;
+
+    try {
+        // 1. Consulta por matrícula
+        response = restClient.get()
+                .uri("/v1/vehicles/plate/{plate}", plate)
+                .retrieve()
+                .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
+    } catch (HttpClientErrorException.NotFound e) {
+        // 2. Si no existe (404), lo crea vía POST
+        response = restClient.post()
+                .uri("/v1/vehicles")
                 .body(Map.of(
                         "plate", plate,
-                        "vehicleType", vehicleType != null ? vehicleType.name() : ""
+                        "type", vehicleType.name()
                 ))
                 .retrieve()
-                .body(Map.class);
-
-        if (response == null || !response.containsKey("id")) {
-            throw new IllegalStateException("No se pudo obtener o registrar el vehículo");
-        }
-
-        return new VehicleInfo(
-                UUID.fromString((String) response.get("id")),
-                (String) response.get("plate"),
-                VehicleType.valueOf((String) response.get("type")),
-                (Boolean) response.get("active")
-        );
+                .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
     }
+
+    if (response == null || response.uniqueId() == null) {
+        throw new IllegalStateException("Respuesta inválida de vehicle-service");
+    }
+
+    VehicleType type = response.type() != null ? VehicleType.valueOf(response.type()) : vehicleType;
+
+    return new VehicleInfo(
+            response.uniqueId(),
+            response.plate() != null ? response.plate() : plate,
+            type,
+            response.isActive()
+    );
+}
 }

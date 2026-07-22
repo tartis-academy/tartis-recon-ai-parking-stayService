@@ -9,10 +9,12 @@ public interface StaySpotPort {
      * Busca una plaza disponible según el tipo de vehículo y la reserva/asigna.
      * Devuelve el ID de la plaza asignada.
      */
-    UUID assignSpot(VehicleType vehicleType);
+    UUID occupySpot(VehicleType vehicleType);
 
     /**
      * Libera la plaza al hacer check-out o al cancelar la estancia.
      */
     void releaseSpot(UUID spotId);
+
+    void updateSpotStatus(UUID spotId, String vehicleType);
 }
