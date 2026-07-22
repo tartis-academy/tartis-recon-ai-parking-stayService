@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    branches: [main, release]
   push:
     branches: [main, release, release123]
 
@@ -55,6 +56,12 @@ jobs:
 
       # Requiere el secret SONAR_TOKEN del repo.
       - name: Analisis SonarCloud (quality gate)
+        # TEMPORAL: el analisis se publica igual, pero no tumba el job. Hoy la
+        # consulta final del gate falla con "Not authorized or project not
+        # found" porque el SONAR_TOKEN no tiene permiso para leer su estado.
+        # Quitar esta linea cuando el token este arreglado y se quiera que el
+        # gate bloquee de verdad.
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
