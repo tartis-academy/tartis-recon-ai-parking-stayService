@@ -24,7 +24,7 @@ public class StayNotFoundException extends RuntimeException {
         return new StayNotFoundException("No existe ninguna estancia con id " + id);
     }
 
-    public static StayNotFoundException activeByPlate(String plate) {
-        return new StayNotFoundException("No existe ninguna estancia en curso para la matricula " + plate);
+    public static StayNotFoundException activeByVehicleId(UUID vehicleId) {
+        return new StayNotFoundException("No existe ninguna estancia en curso para el vehiculo " + vehicleId);
     }
 }
