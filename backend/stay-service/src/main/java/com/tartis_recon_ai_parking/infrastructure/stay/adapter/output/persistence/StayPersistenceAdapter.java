@@ -46,12 +46,12 @@ public class StayPersistenceAdapter implements StayPersistence {
     }
 
     @Override
-    public boolean existsByPlateAndStatus(String plate, StayStatus status) {
-        return repository.existsByPlateAndStatus(plate, status);
+    public boolean existsByVehicleIdAndStatus(UUID vehicleId, StayStatus status) {
+        return repository.existsByVehicleIdAndStatus(vehicleId, status);
     }
 
     @Override
-    public Optional<Stay> findByPlateAndStatus(String plate, StayStatus status) {
-        return repository.findByPlateAndStatus(plate, status).map(mapper::toDomain);
+    public Optional<Stay> findByVehicleIdAndStatus(UUID vehicleId, StayStatus status) {
+        return repository.findByVehicleIdAndStatus(vehicleId, status).map(mapper::toDomain);
     }
 }

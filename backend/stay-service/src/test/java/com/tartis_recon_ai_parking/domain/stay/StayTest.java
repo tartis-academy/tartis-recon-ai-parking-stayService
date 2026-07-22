@@ -23,9 +23,9 @@ class StayTest {
 
     // Datos de apoyo reutilizados por los tests para no repetir literales en cada caso.
     private static final UUID ID = UUID.randomUUID();
+    private static final UUID VEHICLE_ID = UUID.randomUUID();
     private static final UUID SPOT_ID = UUID.randomUUID();
     private static final UUID TARIFF_ID = UUID.randomUUID();
-    private static final String PLATE = "1234ABC";
     private static final Instant CHECK_IN = Instant.parse("2026-07-22T10:00:00Z");
 
     // ------------------------------------------------------------------
@@ -38,7 +38,7 @@ class StayTest {
         // QUE HACE:
         // Crea una estancia nueva con la fabrica checkIn(), que representa un vehiculo
         // que acaba de entrar en el parking.
-        Stay stay = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
 
         // QUE DEBERIA HACER:
         // Debe quedar en estado IN_PROGRESS, activa, sin hora de salida ni importe (IN-14),
@@ -48,22 +48,10 @@ class StayTest {
         assertThat(stay.getCheckOut()).isNull();
         assertThat(stay.getTotalAmount()).isNull();
         assertThat(stay.getId()).isEqualTo(ID);
+        assertThat(stay.getVehicleId()).isEqualTo(VEHICLE_ID);
         assertThat(stay.getSpotId()).isEqualTo(SPOT_ID);
         assertThat(stay.getTariffId()).isEqualTo(TARIFF_ID);
         assertThat(stay.getVehicleType()).isEqualTo(VehicleType.CAR);
-    }
-
-    @Test
-    @DisplayName("Debe normalizar la matricula recortando espacios y pasando a mayusculas")
-    void shouldNormalizePlate() {
-        // QUE HACE:
-        // Crea una estancia con una matricula en minusculas y con espacios alrededor.
-        Stay stay = Stay.checkIn(ID, "  1234abc  ", VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
-
-        // QUE DEBERIA HACER:
-        // La entidad debe almacenar la matricula normalizada (trim + mayusculas), garantizando
-        // que la misma matricula escrita de dos formas distintas se guarde igual.
-        assertThat(stay.getPlate()).isEqualTo("1234ABC");
     }
 
     @Test
@@ -73,13 +61,14 @@ class StayTest {
         // Usa la fabrica restore(), que emplea el adaptador de persistencia para reconstruir
         // una estancia ya cerrada a partir de los datos de la base de datos.
         Instant checkOut = CHECK_IN.plus(30, ChronoUnit.MINUTES);
-        Stay stay = Stay.restore(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID,
+        Stay stay = Stay.restore(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID,
                 CHECK_IN, checkOut, new BigDecimal("2.50"), StayStatus.FINISHED);
 
         // QUE DEBERIA HACER:
         // Debe reconstruirse con exito con todos sus datos, ya que son coherentes con los
         // invariantes; restore revalida, de modo que datos corruptos se detectarian aqui.
         assertThat(stay.getStatus()).isEqualTo(StayStatus.FINISHED);
+        assertThat(stay.getVehicleId()).isEqualTo(VEHICLE_ID);
         assertThat(stay.getCheckOut()).isEqualTo(checkOut);
         assertThat(stay.getTotalAmount()).isEqualByComparingTo("2.50");
         assertThat(stay.isActive()).isFalse();
@@ -94,7 +83,7 @@ class StayTest {
     void shouldFinishStayReturningNewImmutableInstance() {
         // QUE HACE:
         // Parte de una estancia en curso y la cierra con finish(), aportando hora de salida e importe.
-        Stay inProgress = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay inProgress = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
         Instant checkOut = CHECK_IN.plus(1, ChronoUnit.HOURS);
 
         Stay finished = inProgress.finish(checkOut, new BigDecimal("3.00"));
@@ -114,7 +103,7 @@ class StayTest {
     void shouldCancelStay() {
         // QUE HACE:
         // Anula una estancia en curso (caso CB-06: el vehiculo retrocede sin llegar a entrar).
-        Stay inProgress = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay inProgress = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
         Instant cancelledAt = CHECK_IN.plus(2, ChronoUnit.MINUTES);
 
         Stay cancelled = inProgress.cancel(cancelledAt);
@@ -132,7 +121,7 @@ class StayTest {
     void shouldThrowWhenFinishingTerminalStay() {
         // QUE HACE:
         // Cierra una estancia y despues intenta volver a cerrarla.
-        Stay finished = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN)
+        Stay finished = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN)
                 .finish(CHECK_IN.plus(1, ChronoUnit.HOURS), new BigDecimal("3.00"));
 
         // QUE DEBERIA HACER:
@@ -147,7 +136,7 @@ class StayTest {
     void shouldThrowWhenCancellingTerminalStay() {
         // QUE HACE:
         // Anula una estancia y despues intenta anularla otra vez.
-        Stay cancelled = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN)
+        Stay cancelled = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN)
                 .cancel(CHECK_IN.plus(1, ChronoUnit.MINUTES));
 
         // QUE DEBERIA HACER:
@@ -166,7 +155,7 @@ class StayTest {
     void shouldThrowWhenCheckOutBeforeCheckIn() {
         // QUE HACE:
         // Intenta finalizar una estancia con una hora de salida anterior a la de entrada.
-        Stay inProgress = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay inProgress = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
         Instant before = CHECK_IN.minus(5, ChronoUnit.MINUTES);
 
         // QUE DEBERIA HACER:
@@ -181,7 +170,7 @@ class StayTest {
     void shouldThrowWhenFinishedAmountIsNotPositive() {
         // QUE HACE:
         // Intenta finalizar una estancia con importe 0 y luego con importe negativo.
-        Stay inProgress = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay inProgress = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
         Instant checkOut = CHECK_IN.plus(1, ChronoUnit.HOURS);
 
         // QUE DEBERIA HACER:
@@ -202,11 +191,11 @@ class StayTest {
         // primero sin hora de salida, despues sin importe.
         // QUE DEBERIA HACER:
         // restore revalida los invariantes, por lo que ambos casos deben lanzar InvalidStayException.
-        assertThatThrownBy(() -> Stay.restore(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID,
+        assertThatThrownBy(() -> Stay.restore(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID,
                 CHECK_IN, null, new BigDecimal("2.00"), StayStatus.FINISHED))
                 .isInstanceOf(InvalidStayException.class);
 
-        assertThatThrownBy(() -> Stay.restore(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID,
+        assertThatThrownBy(() -> Stay.restore(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID,
                 CHECK_IN, CHECK_IN.plus(1, ChronoUnit.HOURS), null, StayStatus.FINISHED))
                 .isInstanceOf(InvalidStayException.class)
                 .hasMessageContaining("IN-16");
@@ -219,7 +208,7 @@ class StayTest {
         // Intenta reconstruir una estancia en curso que, incoherentemente, tiene hora de salida.
         // QUE DEBERIA HACER:
         // Debe fallar: checkOut es nulo si y solo si el estado es IN_PROGRESS (IN-14).
-        assertThatThrownBy(() -> Stay.restore(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID,
+        assertThatThrownBy(() -> Stay.restore(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID,
                 CHECK_IN, CHECK_IN.plus(1, ChronoUnit.HOURS), null, StayStatus.IN_PROGRESS))
                 .isInstanceOf(InvalidStayException.class)
                 .hasMessageContaining("IN-14");
@@ -229,46 +218,22 @@ class StayTest {
     @DisplayName("IN-13/IN-34: debe lanzar excepcion si algun campo obligatorio es nulo")
     void shouldThrowWhenRequiredFieldIsNull() {
         // QUE HACE:
-        // Intenta crear estancias con campos obligatorios a null (spotId, tariffId, checkIn).
+        // Intenta crear estancias con campos obligatorios a null (vehicleId, spotId, tariffId, checkIn).
         // QUE DEBERIA HACER:
         // Cada caso debe lanzar InvalidStayException indicando el campo que falta, impidiendo
         // construir una entidad invalida.
-        assertThatThrownBy(() -> Stay.checkIn(ID, PLATE, VehicleType.CAR, null, TARIFF_ID, CHECK_IN))
-                .isInstanceOf(InvalidStayException.class)
-                .hasMessageContaining("spotId");
-        assertThatThrownBy(() -> Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, null, CHECK_IN))
-                .isInstanceOf(InvalidStayException.class)
-                .hasMessageContaining("tariffId");
-        assertThatThrownBy(() -> Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, null))
-                .isInstanceOf(InvalidStayException.class)
-                .hasMessageContaining("checkIn");
-    }
-
-    @Test
-    @DisplayName("Debe lanzar excepcion si la matricula es nula o esta vacia")
-    void shouldThrowWhenPlateIsBlank() {
-        // QUE HACE:
-        // Intenta crear estancias con matricula null y con matricula formada solo por espacios.
-        // QUE DEBERIA HACER:
-        // Ambos casos deben lanzar InvalidStayException: la matricula es obligatoria y no vacia.
         assertThatThrownBy(() -> Stay.checkIn(ID, null, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN))
                 .isInstanceOf(InvalidStayException.class)
-                .hasMessageContaining("plate");
-        assertThatThrownBy(() -> Stay.checkIn(ID, "   ", VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN))
+                .hasMessageContaining("vehicleId");
+        assertThatThrownBy(() -> Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, null, TARIFF_ID, CHECK_IN))
                 .isInstanceOf(InvalidStayException.class)
-                .hasMessageContaining("vacia");
-    }
-
-    @Test
-    @DisplayName("Debe lanzar excepcion si la matricula supera los 15 caracteres")
-    void shouldThrowWhenPlateTooLong() {
-        // QUE HACE:
-        // Intenta crear una estancia con una matricula de 16 caracteres.
-        // QUE DEBERIA HACER:
-        // Debe lanzar InvalidStayException por superar la longitud maxima admitida (15).
-        assertThatThrownBy(() -> Stay.checkIn(ID, "ABCDEFGHIJKLMNOP", VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN))
+                .hasMessageContaining("spotId");
+        assertThatThrownBy(() -> Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, null, CHECK_IN))
                 .isInstanceOf(InvalidStayException.class)
-                .hasMessageContaining("15");
+                .hasMessageContaining("tariffId");
+        assertThatThrownBy(() -> Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, null))
+                .isInstanceOf(InvalidStayException.class)
+                .hasMessageContaining("checkIn");
     }
 
     // ------------------------------------------------------------------
@@ -281,7 +246,7 @@ class StayTest {
     void shouldRoundParkedMinutesUp(long seconds) {
         // QUE HACE:
         // Calcula los minutos estacionados para distintas duraciones en segundos.
-        Stay stay = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
         Instant until = CHECK_IN.plusSeconds(seconds);
 
         // QUE DEBERIA HACER:
@@ -296,7 +261,7 @@ class StayTest {
     void shouldThrowWhenUntilBeforeCheckIn() {
         // QUE HACE:
         // Pide los minutos estacionados pasando un instante anterior a la hora de entrada.
-        Stay stay = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
 
         // QUE DEBERIA HACER:
         // Debe lanzar InvalidStayException: no se puede calcular una duracion negativa.
@@ -310,7 +275,7 @@ class StayTest {
     void shouldThrowParkedMinutesWhenInProgress() {
         // QUE HACE:
         // Pide los minutos totales (basados en checkOut) de una estancia todavia abierta.
-        Stay stay = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
 
         // QUE DEBERIA HACER:
         // Debe lanzar InvalidStayException porque una estancia en curso aun no tiene hora de salida.
@@ -325,7 +290,7 @@ class StayTest {
         // QUE HACE:
         // Cierra una estancia de 90 minutos exactos y consulta parkedMinutes().
         Instant checkOut = CHECK_IN.plus(90, ChronoUnit.MINUTES);
-        Stay finished = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN)
+        Stay finished = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN)
                 .finish(checkOut, new BigDecimal("4.50"));
 
         // QUE DEBERIA HACER:
@@ -342,7 +307,7 @@ class StayTest {
     void shouldBeEqualById() {
         // QUE HACE:
         // Compara una estancia en curso con su version finalizada (mismo id, distinto estado).
-        Stay inProgress = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay inProgress = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
         Stay finished = inProgress.finish(CHECK_IN.plus(1, ChronoUnit.HOURS), new BigDecimal("3.00"));
 
         // QUE DEBERIA HACER:
@@ -357,8 +322,8 @@ class StayTest {
     void shouldNotBeEqualWhenDifferentId() {
         // QUE HACE:
         // Crea dos estancias con identicos datos salvo el id.
-        Stay a = Stay.checkIn(ID, PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
-        Stay b = Stay.checkIn(UUID.randomUUID(), PLATE, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay a = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+        Stay b = Stay.checkIn(UUID.randomUUID(), VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
 
         // QUE DEBERIA HACER:
         // Deben considerarse distintas: la igualdad depende exclusivamente del id.

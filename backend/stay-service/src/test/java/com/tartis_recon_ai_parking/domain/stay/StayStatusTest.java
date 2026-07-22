@@ -12,12 +12,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 // nuevas transiciones.
 class StayStatusTest {
 
-    @Test
-    @DisplayName("IN_PROGRESS no debe ser un estado terminal")
-    void inProgressIsNotTerminal() {
+    @ParameterizedTest
+    @EnumSource(value = StayStatus.class, names = { "IN_PROGRESS", "PAY_PENDING", "PAID" })
+    @DisplayName("IN_PROGRESS y los estados de pago transitorios NO deben ser terminales")
+    void nonTerminalStates(StayStatus status) {
         // QUE HACE / QUE DEBERIA HACER:
-        // IN_PROGRESS es el unico estado no terminal: una estancia en curso admite cambios.
-        assertThat(StayStatus.IN_PROGRESS.isTerminal()).isFalse();
+        // IN_PROGRESS y los estados transitorios de pago (PAY_PENDING, PAID) admiten
+        // cambios, por lo que no son terminales.
+        assertThat(status.isTerminal()).isFalse();
     }
 
     @ParameterizedTest

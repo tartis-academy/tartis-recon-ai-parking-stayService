@@ -20,16 +20,16 @@ public interface StayPersistence {
     List<Stay> findAll();
  
     /**
-     * IN-02 / IN-18: un vehiculo (identificado por matricula) nunca tiene mas
+     * IN-02 / IN-18: un vehiculo (identificado por su vehicleId) nunca tiene mas
      * de una estancia en curso simultaneamente. El caso de uso de check-in
      * debe comprobar esto antes de crear una Stay nueva (cubre tambien CB-05:
-     * denegar acceso si la matricula ya consta activa).
+     * denegar acceso si el vehiculo ya consta activo).
      */
-    boolean existsByPlateAndStatus(String plate, StayStatus status);
- 
+    boolean existsByVehicleIdAndStatus(UUID vehicleId, StayStatus status);
+
     /**
-     * Recupera la estancia activa de una matricula (por ejemplo, para el
-     * check-out via matricula en vez de via stayId).
+     * Recupera la estancia activa de un vehiculo (por ejemplo, para el
+     * check-out via vehicleId en vez de via stayId).
      */
-    Optional<Stay> findByPlateAndStatus(String plate, StayStatus status);
+    Optional<Stay> findByVehicleIdAndStatus(UUID vehicleId, StayStatus status);
 }

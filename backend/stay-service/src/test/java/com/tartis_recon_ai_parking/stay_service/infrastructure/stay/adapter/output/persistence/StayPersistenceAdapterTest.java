@@ -38,13 +38,15 @@ class StayPersistenceAdapterTest {
     private Stay stayDomain;
     private StayEntity stayEntity;
     private UUID stayId;
+    private UUID vehicleId;
 
     @BeforeEach
     void setUp() {
         stayId = UUID.randomUUID();
+        vehicleId = UUID.randomUUID();
         stayDomain = Stay.checkIn(
                 stayId,
-                "1234ABC",
+                vehicleId,
                 VehicleType.CAR,
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -53,7 +55,7 @@ class StayPersistenceAdapterTest {
 
         stayEntity = new StayEntity(
                 stayId,
-                "1234ABC",
+                vehicleId,
                 VehicleType.CAR,
                 stayDomain.getSpotId(),
                 stayDomain.getTariffId(),
@@ -100,23 +102,23 @@ class StayPersistenceAdapterTest {
     }
 
     @Test
-    void existsByPlateAndStatus_ShouldReturnTrue_WhenExists() {
-        when(repository.existsByPlateAndStatus("1234ABC", StayStatus.IN_PROGRESS)).thenReturn(true);
+    void existsByVehicleIdAndStatus_ShouldReturnTrue_WhenExists() {
+        when(repository.existsByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS)).thenReturn(true);
 
-        boolean exists = adapter.existsByPlateAndStatus("1234ABC", StayStatus.IN_PROGRESS);
+        boolean exists = adapter.existsByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS);
 
         assertTrue(exists);
-        verify(repository).existsByPlateAndStatus("1234ABC", StayStatus.IN_PROGRESS);
+        verify(repository).existsByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS);
     }
 
     @Test
-    void findByPlateAndStatus_ShouldReturnStay_WhenFound() {
-        when(repository.findByPlateAndStatus("1234ABC", StayStatus.IN_PROGRESS)).thenReturn(Optional.of(stayEntity));
+    void findByVehicleIdAndStatus_ShouldReturnStay_WhenFound() {
+        when(repository.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS)).thenReturn(Optional.of(stayEntity));
         when(mapper.toDomain(stayEntity)).thenReturn(stayDomain);
 
-        Optional<Stay> result = adapter.findByPlateAndStatus("1234ABC", StayStatus.IN_PROGRESS);
+        Optional<Stay> result = adapter.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS);
 
         assertTrue(result.isPresent());
-        assertEquals("1234ABC", result.get().getPlate());
+        assertEquals(vehicleId, result.get().getVehicleId());
     }
 }

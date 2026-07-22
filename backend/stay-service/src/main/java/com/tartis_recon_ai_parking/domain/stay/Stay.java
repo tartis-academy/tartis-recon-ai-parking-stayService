@@ -18,9 +18,14 @@ import java.util.UUID;
  *
  * <p>No importa nada de Spring, JPA ni HTTP: es Java puro (invariante IN-32).
  *
+ * <p>La estancia referencia al vehiculo por su <b>identidad</b> ({@code vehicleId},
+ * el UUID que posee vehicle-service), no por su matricula: la matricula la resuelve
+ * el sensor de entrada y vehicle-service, y solo vive en el contrato/API. El dominio
+ * trabaja siempre con el identificador estable.
+ *
  * <p><b>Invariantes garantizados por esta clase</b>
  * <ul>
- *   <li><b>IN-13</b> — toda estancia referencia exactamente un vehiculo (matricula),
+ *   <li><b>IN-13</b> — toda estancia referencia exactamente un vehiculo (por su id),
  *       una plaza y una tarifa; ninguno puede ser nulo.</li>
  *   <li><b>IN-14</b> — {@code checkOut} es nulo si y solo si el estado es
  *       {@link StayStatus#IN_PROGRESS}.</li>
@@ -38,11 +43,8 @@ import java.util.UUID;
  */
 public final class Stay {
 
-    /** Longitud maxima razonable para una matricula, incluyendo formatos internacionales. */
-    private static final int MAX_PLATE_LENGTH = 15;
-
     private final UUID id;
-    private final String plate;
+    private final UUID vehicleId;
     private final VehicleType vehicleType;
     private final UUID spotId;
     private final UUID tariffId;
@@ -52,7 +54,7 @@ public final class Stay {
     private final StayStatus status;
 
     private Stay(UUID id,
-                 String plate,
+                 UUID vehicleId,
                  VehicleType vehicleType,
                  UUID spotId,
                  UUID tariffId,
@@ -61,7 +63,7 @@ public final class Stay {
                  BigDecimal totalAmount,
                  StayStatus status) {
         this.id = required(id, "id");
-        this.plate = normalizePlate(plate);
+        this.vehicleId = required(vehicleId, "vehicleId");
         this.vehicleType = required(vehicleType, "vehicleType");
         this.spotId = required(spotId, "spotId");
         this.tariffId = required(tariffId, "tariffId");
@@ -78,15 +80,15 @@ public final class Stay {
 
     /**
      * Crea una estancia nueva en curso, tras un check-in correcto.
-     * La plaza y la tarifa ya deben haber sido resueltas por el caso de uso.
+     * El vehiculo, la plaza y la tarifa ya deben haber sido resueltos por el caso de uso.
      */
     public static Stay checkIn(UUID id,
-                               String plate,
+                               UUID vehicleId,
                                VehicleType vehicleType,
                                UUID spotId,
                                UUID tariffId,
                                Instant checkIn) {
-        return new Stay(id, plate, vehicleType, spotId, tariffId, checkIn,
+        return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
                 null, null, StayStatus.IN_PROGRESS);
     }
 
@@ -96,7 +98,7 @@ public final class Stay {
      * de modo que datos corruptos en base de datos se detectan al cargarlos.
      */
     public static Stay restore(UUID id,
-                               String plate,
+                               UUID vehicleId,
                                VehicleType vehicleType,
                                UUID spotId,
                                UUID tariffId,
@@ -104,7 +106,7 @@ public final class Stay {
                                Instant checkOut,
                                BigDecimal totalAmount,
                                StayStatus status) {
-        return new Stay(id, plate, vehicleType, spotId, tariffId, checkIn,
+        return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
                 checkOut, totalAmount, status);
     }
 
@@ -117,13 +119,13 @@ public final class Stay {
      *
      * @return una nueva instancia en estado {@link StayStatus#FINISHED}
      * @throws InvalidStayException si la estancia ya estaba en un estado terminal (IN-19),
-     *                              si {@code checkOut} es anterior al check-in (IN-15)
+     *                              si {@code checkOutAt} es anterior al check-in (IN-15)
      *                              o si el importe no es mayor que cero (IN-16)
      */
-    public Stay finish(Instant checkOut, BigDecimal totalAmount) {
+    public Stay finish(Instant checkOutAt, BigDecimal totalAmount) {
         ensureModifiable("finalizar");
-        return new Stay(id, plate, vehicleType, spotId, tariffId, checkIn,
-                required(checkOut, "checkOut"), required(totalAmount, "totalAmount"),
+        return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
+                required(checkOutAt, "checkOut"), required(totalAmount, "totalAmount"),
                 StayStatus.FINISHED);
     }
 
@@ -136,7 +138,7 @@ public final class Stay {
      */
     public Stay cancel(Instant cancelledAt) {
         ensureModifiable("anular");
-        return new Stay(id, plate, vehicleType, spotId, tariffId, checkIn,
+        return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
                 required(cancelledAt, "cancelledAt"), null, StayStatus.CANCELLED);
     }
 
@@ -231,19 +233,6 @@ public final class Stay {
         return value;
     }
 
-    private static String normalizePlate(String rawPlate) {
-        required(rawPlate, "plate");
-        String normalized = rawPlate.trim().toUpperCase();
-        if (normalized.isEmpty()) {
-            throw new InvalidStayException("La matricula no puede estar vacia");
-        }
-        if (normalized.length() > MAX_PLATE_LENGTH) {
-            throw new InvalidStayException(
-                    "La matricula no puede superar " + MAX_PLATE_LENGTH + " caracteres");
-        }
-        return normalized;
-    }
-
     // ------------------------------------------------------------------
     // Accesores
     // ------------------------------------------------------------------
@@ -252,8 +241,8 @@ public final class Stay {
         return id;
     }
 
-    public String getPlate() {
-        return plate;
+    public UUID getVehicleId() {
+        return vehicleId;
     }
 
     public VehicleType getVehicleType() {
@@ -309,7 +298,7 @@ public final class Stay {
     @Override
     public String toString() {
         return "Stay{id=" + id
-                + ", plate='" + plate + '\''
+                + ", vehicleId=" + vehicleId
                 + ", vehicleType=" + vehicleType
                 + ", spotId=" + spotId
                 + ", status=" + status
