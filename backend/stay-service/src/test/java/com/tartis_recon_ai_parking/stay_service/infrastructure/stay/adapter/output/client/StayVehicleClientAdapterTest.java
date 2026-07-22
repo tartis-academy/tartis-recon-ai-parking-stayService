@@ -16,6 +16,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class StayVehicleClientAdapterTest {
@@ -30,32 +31,68 @@ class StayVehicleClientAdapterTest {
         stayVehicleClientAdapter = new StayVehicleClientAdapter(builder, "http://vehicle-service:8080");
     }
 
-    @Test
-    void shouldGetOrCreateVehicle() {
-        // GIVEN
-        UUID expectedVehicleId = UUID.randomUUID();
-        String jsonResponse = """
-                {
-                    "id": "%s",
-                    "plate": "1234ABC",
-                    "type": "CAR",
-                    "active": true
-                }
-                """.formatted(expectedVehicleId);
+@Test
+void shouldGetOrCreateVehicle() {
+    // GIVEN
+    UUID expectedVehicleId = UUID.randomUUID();
+    
+    // JSON simula la respuesta real del microservicio externo con "uniqueId"
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(expectedVehicleId);
 
-        server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/resolve"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
-        // WHEN
-        StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+    // WHEN
+    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
 
-        // THEN
-        assertNotNull(vehicleInfo);
-        assertEquals(expectedVehicleId, vehicleInfo.vehicleId());
-        assertEquals("1234ABC", vehicleInfo.plate());
-        assertEquals(VehicleType.CAR, vehicleInfo.vehicleType());
-        assertTrue(vehicleInfo.active());
-        server.verify();
-    }
+    // THEN
+    assertNotNull(vehicleInfo);
+    // Verificamos que se mapeó correctamente a nuestro record interno
+    assertEquals(expectedVehicleId, vehicleInfo.vehicleId());
+    assertEquals("1234ABC", vehicleInfo.plate());
+    assertEquals(VehicleType.CAR, vehicleInfo.vehicleType());
+    assertTrue(vehicleInfo.active());
+    
+    server.verify();
+}
+
+@Test
+void shouldCreateVehicleWhenNotFoundByPlate() {
+    // GIVEN
+    UUID expectedVehicleId = UUID.randomUUID();
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(expectedVehicleId);
+
+    // 1. Espera el primer intento (GET) y devuelve 404
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    // 2. Espera el segundo intento (POST) para crearlo y devuelve éxito
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+
+    // THEN
+    assertNotNull(vehicleInfo);
+    assertEquals(expectedVehicleId, vehicleInfo.vehicleId());
+    server.verify();
+}
 }

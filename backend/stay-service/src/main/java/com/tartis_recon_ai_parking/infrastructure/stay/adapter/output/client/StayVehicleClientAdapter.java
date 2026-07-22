@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
@@ -21,26 +22,42 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
         this.restClient = builder.baseUrl(vehicleServiceUrl).build();
     }
 
+
     @Override
-    public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
-        Map<?, ?> response = restClient.post()
-                .uri("/v1/vehicles/resolve")
+public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
+    Map<String, Object> response;
+
+    try {
+        // 1. Consulta por matrícula
+        response = restClient.get()
+                .uri("/v1/vehicles/plate/{plate}", plate)
+                .retrieve()
+                .body(Map.class);
+    } catch (HttpClientErrorException.NotFound e) {
+        // 2. Si no existe (404), lo crea vía POST
+        response = restClient.post()
+                .uri("/v1/vehicles")
                 .body(Map.of(
                         "plate", plate,
-                        "vehicleType", vehicleType != null ? vehicleType.name() : ""
+                        "type", vehicleType.name()
                 ))
                 .retrieve()
                 .body(Map.class);
-
-        if (response == null || !response.containsKey("id")) {
-            throw new IllegalStateException("No se pudo obtener o registrar el vehículo");
-        }
-
-        return new VehicleInfo(
-                UUID.fromString((String) response.get("id")),
-                (String) response.get("plate"),
-                VehicleType.valueOf((String) response.get("type")),
-                (Boolean) response.get("active")
-        );
     }
+
+    // Comprobamos la clave REAL que devuelve el servicio ("uniqueId")
+    if (response == null || !response.containsKey("uniqueId")) {
+        throw new IllegalStateException("Respuesta inválida de vehicle-service: no se encontró 'uniqueId'");
+    }
+
+    // Mapeamos 'uniqueId' al campo 'vehicleId' de nuestro VehicleInfo local
+    UUID vehicleId = UUID.fromString(response.get("uniqueId").toString());
+    String responsePlate = (String) response.getOrDefault("plate", plate);
+    
+    String typeStr = (String) response.get("type");
+    VehicleType type = typeStr != null ? VehicleType.valueOf(typeStr) : vehicleType;
+    Boolean active = (Boolean) response.getOrDefault("active", true);
+
+    return new VehicleInfo(vehicleId, responsePlate, type, active);
+}
 }

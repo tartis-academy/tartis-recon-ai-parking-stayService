@@ -5,6 +5,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client.Sta
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -12,6 +13,7 @@ import org.springframework.web.client.RestClient;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -34,20 +36,28 @@ class StaySpotClientAdapterTest {
     }
 
     @Test
-    void shouldAssignSpotSuccessfully() {
-        // GIVEN
-        UUID expectedSpotId = UUID.randomUUID();
-        String jsonResponse = "{\"spotId\": \"" + expectedSpotId + "\"}";
+    void shouldOccupySpotSuccessfully() {
+    // GIVEN
+    UUID expectedSpotId = UUID.randomUUID();
+    
+    // CORRECCIÓN: Usar "id" en lugar de "spotId" en el JSON simulado
+    String jsonResponse = """
+            {
+                "id": "%s",
+                "status": "OCCUPIED"
+            }
+            """.formatted(expectedSpotId);
 
-        server.expect(requestTo("http://spot-service:8080/v1/spots/assign"))
-                .andExpect(method(org.springframework.http.HttpMethod.POST))
-                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+    server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
+            .andExpect(method(HttpMethod.PATCH))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
-        // WHEN
-        UUID actualSpotId = staySpotClientAdapter.assignSpot(VehicleType.CAR);
+    // WHEN
+    UUID spotId = staySpotClientAdapter.occupySpot(VehicleType.CAR);
 
-        // THEN
-        assertEquals(expectedSpotId, actualSpotId);
-        server.verify(); // Confirma que la petición HTTP ocurrió
-    }
+    // THEN
+    assertNotNull(spotId);
+    assertEquals(expectedSpotId, spotId);
+    server.verify();
+}
 }

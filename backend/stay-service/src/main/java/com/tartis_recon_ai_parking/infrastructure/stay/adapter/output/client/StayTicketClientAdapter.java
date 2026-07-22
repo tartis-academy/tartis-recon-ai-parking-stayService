@@ -22,27 +22,17 @@ public class StayTicketClientAdapter implements StayTicketPort {
     }
 
     @Override
-    public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant checkIn) {
-        Map<?, ?> response = restClient.post()
-                .uri("/v1/tickets/entry")
-                .body(Map.of(
-                        "stayId", stayId.toString(),
-                        "plate", plate,
-                        "checkIn", checkIn.toString()
-                ))
-                .retrieve()
-                .body(Map.class);
-
-        if (response == null || !response.containsKey("ticketId")) {
-            throw new IllegalStateException("Error al emitir el ticket de entrada");
-        }
-
-        return new EntryTicketInfo(
-                UUID.fromString((String) response.get("ticketId")),
-                (String) response.get("barCode"),
-                Instant.parse((String) response.get("issuedAt"))
-        );
-    }
+public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issuedAt) {
+    return restClient.post()
+            .uri("/v1/entry-tickets") // La raíz del recurso sin añadir /entry
+            .body(Map.of(
+                    "stayId", stayId,
+                    "plate", plate,
+                    "issuedAt", issuedAt.toString()
+            ))
+            .retrieve()
+            .body(EntryTicketInfo.class);
+}
 
     @Override
     public UUID issueExitTicket(UUID stayId, UUID entryTicketId) {

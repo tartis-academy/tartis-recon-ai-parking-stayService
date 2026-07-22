@@ -22,20 +22,20 @@ public class StaySpotClientAdapter implements StaySpotPort {
     }
 
     @Override
-    public UUID assignSpot(VehicleType vehicleType) {
-        // Llama a spot-service para reservar una plaza libre según tipo
-        Map<?, ?> response = restClient.post()
-                .uri("/v1/spots/assign")
-                .body(Map.of("vehicleType", vehicleType.name()))
-                .retrieve()
-                .body(Map.class);
+public UUID occupySpot(VehicleType vehicleType) {
+    Map<String, Object> response = restClient.patch()
+            .uri("/v1/spots/occupy") 
+            .body(Map.of("type", vehicleType.name()))
+            .retrieve()
+            .body(Map.class);
 
-        if (response == null || !response.containsKey("spotId")) {
-            throw new IllegalStateException("No hay plazas disponibles para el tipo: " + vehicleType);
-        }
 
-        return UUID.fromString((String) response.get("spotId"));
+    if (response == null || !response.containsKey("id")) {
+        throw new IllegalStateException("No hay plazas disponibles o respuesta inválida del servicio de plazas");
     }
+
+    return UUID.fromString(response.get("id").toString());
+}
 
     @Override
     public void releaseSpot(UUID spotId) {
@@ -44,4 +44,13 @@ public class StaySpotClientAdapter implements StaySpotPort {
                 .retrieve()
                 .toBodilessEntity();
     }
+
+    @Override
+    public void updateSpotStatus(UUID spotId, String vehicleType) {
+    restClient.patch()
+            .uri("/v1/spots/{id}/status", spotId)
+            .body(Map.of("type", vehicleType)) // Ajusta las claves según SpotRequest
+            .retrieve()
+            .toBodilessEntity();
+}
 }

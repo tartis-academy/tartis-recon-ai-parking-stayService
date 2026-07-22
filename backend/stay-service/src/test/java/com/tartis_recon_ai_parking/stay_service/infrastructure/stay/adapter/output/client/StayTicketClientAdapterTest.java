@@ -46,7 +46,7 @@ class StayTicketClientAdapterTest {
                 }
                 """.formatted(expectedTicketId);
 
-        server.expect(requestTo("http://ticket-service:8080/v1/tickets/entry"))
+        server.expect(requestTo("http://ticket-service:8080/v1/entry-tickets"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
