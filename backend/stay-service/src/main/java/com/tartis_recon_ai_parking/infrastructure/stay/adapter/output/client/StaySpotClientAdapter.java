@@ -2,6 +2,8 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.SpotResponse;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,18 +25,17 @@ public class StaySpotClientAdapter implements StaySpotPort {
 
     @Override
 public UUID occupySpot(VehicleType vehicleType) {
-    Map<String, Object> response = restClient.patch()
-            .uri("/v1/spots/occupy") 
+    SpotResponse response = restClient.patch()
+            .uri("/v1/spots/occupy")
             .body(Map.of("type", vehicleType.name()))
             .retrieve()
-            .body(Map.class);
+            .body(SpotResponse.class); // <-- Uso del DTO limpia los warnings
 
-
-    if (response == null || !response.containsKey("id")) {
+    if (response == null || response.id() == null) {
         throw new IllegalStateException("No hay plazas disponibles o respuesta inválida del servicio de plazas");
     }
 
-    return UUID.fromString(response.get("id").toString());
+    return response.id();
 }
 
     @Override
