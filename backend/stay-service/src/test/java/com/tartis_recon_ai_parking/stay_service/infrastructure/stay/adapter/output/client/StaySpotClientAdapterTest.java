@@ -49,7 +49,7 @@ class StaySpotClientAdapterTest {
             """.formatted(expectedSpotId);
 
     server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
-            .andExpect(method(HttpMethod.PATCH))
+            .andExpect(method(HttpMethod.POST))
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
