@@ -25,7 +25,7 @@ public class StaySpotClientAdapter implements StaySpotPort {
 
     @Override
 public UUID occupySpot(VehicleType vehicleType) {
-    SpotResponse response = restClient.patch()
+    SpotResponse response = restClient.post()
             .uri("/v1/spots/occupy")
             .body(Map.of("type", vehicleType.name()))
             .retrieve()
