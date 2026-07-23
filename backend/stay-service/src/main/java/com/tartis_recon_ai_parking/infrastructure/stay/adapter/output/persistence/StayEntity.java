@@ -13,10 +13,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Entidad JPA que mapea la tabla de estancias en PostgreSQL (Stay DB).
- * Vive unicamente en infrastructure (IN-32).
- */
 @Entity
 @Table(name = "stays")
 public class StayEntity {
@@ -52,7 +48,7 @@ public class StayEntity {
     private StayStatus status;
 
     protected StayEntity() {
-        // Requerido por JPA/Hibernate.
+        // Requerido por JPA/Hibernate
     }
 
     public StayEntity(UUID uniqueId, UUID vehicleId, VehicleType vehicleType, UUID spotId,UUID tariffId, Instant checkIn, Instant checkOut,BigDecimal totalAmount, StayStatus status) {

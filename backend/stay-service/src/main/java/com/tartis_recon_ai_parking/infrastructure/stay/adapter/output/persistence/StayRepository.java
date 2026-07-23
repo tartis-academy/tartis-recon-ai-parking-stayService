@@ -6,11 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Repositorio Spring Data JPA para StayEntity.
- * existsByVehicleIdAndStatus / findByVehicleIdAndStatus se generan por Spring Data
- * a partir del nombre del metodo (query derivation), sin necesidad de @Query.
- */
 public interface StayRepository extends JpaRepository<StayEntity, UUID> {
 
     boolean existsByVehicleIdAndStatus(UUID vehicleId, StayStatus status);

@@ -10,11 +10,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Implementacion del puerto de salida StayPersistence (IN-33).
- * Traduce entre el modelo de dominio Stay y la entidad JPA StayEntity a
- * traves de StayPersistenceMapper, y delega en StayRepository.
- */
 @Component
 public class StayPersistenceAdapter implements StayPersistence {
 

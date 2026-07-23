@@ -4,15 +4,6 @@ import com.tartis_recon_ai_parking.domain.stay.Stay;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-/**
- * Mapper de infraestructura entre el modelo de Dominio (Stay) y el modelo
- * de Base de Datos (StayEntity).
- *
- * <p>toEntity() lo genera MapStruct automaticamente (Stay solo tiene getters).
- * toDomain() se escribe a mano porque Stay no tiene constructor publico:
- * hay que reconstruirla via el factory estatico Stay.restore(), que revalida
- * todos los invariantes de dominio al cargar datos desde la base de datos.
- */
 @Mapper(componentModel = "spring")
 public interface StayPersistenceMapper {
 

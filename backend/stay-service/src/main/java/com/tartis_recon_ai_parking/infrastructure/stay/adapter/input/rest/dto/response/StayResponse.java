@@ -6,13 +6,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Respuesta con el detalle de una estancia (GET /v1/stays/{id}, listado, cancel).
- * Corresponde al schema {@code StayResponse} del openapi.yml.
- *
- * <p>{@code plate} lo rellena el caso de uso resolviendolo contra vehicle-service
- * a partir de {@code vehicleId}; el dominio no lo almacena.
- */
 public class StayResponse {
 
     private UUID stayId;
@@ -26,6 +19,7 @@ public class StayResponse {
     private BigDecimal totalAmount;
 
     public StayResponse() {
+        // Requerido para la deserializacion (Jackson)
     }
 
     public StayResponse(UUID stayId, String plate, UUID vehicleId, UUID spotId, UUID tariffId,
