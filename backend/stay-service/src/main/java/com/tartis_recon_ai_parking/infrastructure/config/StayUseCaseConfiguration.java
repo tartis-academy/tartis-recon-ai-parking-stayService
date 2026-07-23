@@ -6,6 +6,7 @@ import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
+import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,5 +44,10 @@ public class StayUseCaseConfiguration {
     @Bean
     Clock clock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    GetStayUseCase getStayUseCase(StayPersistence stayPersistence, StayDTOFactory stayDTOFactory) {
+        return new GetStayUseCase(stayPersistence, stayDTOFactory);
     }
 }
