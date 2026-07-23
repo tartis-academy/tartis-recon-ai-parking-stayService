@@ -88,7 +88,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
-        when(tariffPort.calculateAmount(tariffId, checkIn, NOW)).thenReturn(new BigDecimal("3.00"));
+        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
         when(ticketPort.issueExitTicket(eq(stayId), any())).thenReturn(exitTicketId);
 

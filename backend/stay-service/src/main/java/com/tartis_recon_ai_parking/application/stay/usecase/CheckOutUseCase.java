@@ -61,7 +61,8 @@ public class CheckOutUseCase {
 
         Instant checkOut = clock.instant();
 
-        BigDecimal amount = tariffPort.calculateAmount(stay.getTariffId(), stay.getCheckIn(), checkOut);
+        long totalMinutes = stay.parkedMinutesUntil(checkOut);
+        BigDecimal amount = tariffPort.calculateAmount(stay.getVehicleType(), totalMinutes);
 
         Stay finished = stay.finish(checkOut, amount);
         Stay saved = stayPersistence.save(finished);
@@ -70,7 +71,6 @@ public class CheckOutUseCase {
 
         releaseSpotQuietly(saved.getSpotId());
 
-        long totalMinutes = saved.parkedMinutes();
         return new CheckOutResultDTO(stayDTOFactory.create(saved), exitTicketId, totalMinutes);
     }
 
