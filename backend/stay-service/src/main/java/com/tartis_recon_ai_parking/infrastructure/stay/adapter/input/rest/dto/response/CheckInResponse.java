@@ -5,6 +5,10 @@ import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Respuesta del check-in: estancia creada, plaza asignada y ticket de entrada emitido.
+ * Corresponde al schema {@code CheckInResponse} del openapi.yml.
+ */
 public class CheckInResponse {
 
     private UUID stayId;
