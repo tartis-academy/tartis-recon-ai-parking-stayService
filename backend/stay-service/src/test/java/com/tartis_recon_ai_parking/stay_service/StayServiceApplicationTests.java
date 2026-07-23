@@ -8,11 +8,13 @@ import org.springframework.test.context.ActiveProfiles;
 // Se ejecuta con el perfil "test" (H2 en memoria) para no depender de un
 // Postgres externo ni heredar la configuracion del perfil dev.
 @SpringBootTest
-@ActiveProfiles("test")
+
+@ActiveProfiles("test") // <-- ¡Asegúrate de tener esta anotación!
+
+
 class StayServiceApplicationTests {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {
+    }
 }
