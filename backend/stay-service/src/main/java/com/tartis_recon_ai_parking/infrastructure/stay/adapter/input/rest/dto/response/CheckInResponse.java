@@ -19,6 +19,7 @@ public class CheckInResponse {
     private EntryTicketResponse entryTicket;
 
     public CheckInResponse() {
+        // Requerido para la deserializacion (Jackson)
     }
 
     public CheckInResponse(UUID stayId, String plate, UUID spotId, Instant checkIn,

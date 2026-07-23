@@ -6,14 +6,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Traduccion entre el dominio Stay y el DTO de aplicacion StayDTO.
- *
- * <p>Solo expone la direccion dominio -> DTO. A diferencia de la demo, no hay un
- * {@code create(StayCreateDTO)} que devuelva el dominio: crear una Stay necesita
- * datos resueltos por el caso de uso (vehicleId, plaza y tarifa), asi que se hace
- * en el caso de uso via {@link Stay#checkIn}.
- */
 @Component
 public class StayDTOFactory {
 

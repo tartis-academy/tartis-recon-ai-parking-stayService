@@ -6,24 +6,21 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Respuesta del check-out: estancia cerrada, ticket de salida generado y plaza liberada.
- * Corresponde al schema {@code CheckOutResponse} del openapi.yml.
- */
 public class CheckOutResponse {
 
     private UUID stayId;
     private String plate;
     private Instant checkIn;
     private Instant checkOut;
-    /** Minutos redondeados hacia arriba, a favor del sistema (RN-06). */
+
     private Long totalMinutes;
     private BigDecimal amount;
-    /** Ticket de salida / recibo de pago. */
+
     private UUID ticketId;
     private StayStatus status;
 
     public CheckOutResponse() {
+        // Requerido para la deserializacion (Jackson)
     }
 
     public CheckOutResponse(UUID stayId, String plate, Instant checkIn, Instant checkOut,

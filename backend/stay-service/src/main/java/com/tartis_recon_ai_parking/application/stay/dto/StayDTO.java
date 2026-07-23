@@ -7,13 +7,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Salida de los casos de uso de stay (proyeccion del dominio Stay).
- *
- * <p>Referencia al vehiculo por {@code vehicleId} (no por matricula); el dominio
- * no guarda la matricula. {@code checkOut} y {@code totalAmount} son {@code null}
- * mientras la estancia siga en curso (IN-14/IN-16).
- */
 public class StayDTO {
 
 	private final UUID stayId;

@@ -3,10 +3,6 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.r
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Ticket de entrada emitido en el check-in.
- * Corresponde al schema {@code EntryTicket} del openapi.yml.
- */
 public class EntryTicketResponse {
 
     private UUID ticketId;
@@ -14,6 +10,7 @@ public class EntryTicketResponse {
     private Instant issuedAt;
 
     public EntryTicketResponse() {
+        // Requerido para la deserializacion (Jackson)
     }
 
     public EntryTicketResponse(UUID ticketId, String barCode, Instant issuedAt) {

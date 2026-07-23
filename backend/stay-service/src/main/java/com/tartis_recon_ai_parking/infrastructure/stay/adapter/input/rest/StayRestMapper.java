@@ -6,6 +6,7 @@ import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
 
 import org.springframework.stereotype.Component;
 
@@ -38,6 +39,20 @@ public class StayRestMapper {
                 dto.getCheckIn(),
                 dto.getStatus(),
                 null);
+    }
+
+    /** {@code plate} queda a null: el dominio no la guarda (ver {@link #toCheckInResponse}). */
+    public StayResponse toStayResponse(StayDTO dto) {
+        return new StayResponse(
+                dto.getStayId(),
+                null,
+                dto.getVehicleId(),
+                dto.getSpotId(),
+                dto.getTariffId(),
+                dto.getStatus(),
+                dto.getCheckIn(),
+                dto.getCheckOut(),
+                dto.getTotalAmount());
     }
 
     private static VehicleType parseVehicleType(String raw) {

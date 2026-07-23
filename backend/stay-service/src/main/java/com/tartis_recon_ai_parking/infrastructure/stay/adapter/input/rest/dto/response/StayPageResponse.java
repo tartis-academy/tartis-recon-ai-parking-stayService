@@ -2,10 +2,6 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.r
 
 import java.util.List;
 
-/**
- * Pagina de estancias para el listado con filtros (GET /v1/stays).
- * Corresponde al schema {@code StayPage} del openapi.yml.
- */
 public class StayPageResponse {
 
     private List<StayResponse> content;
@@ -15,6 +11,7 @@ public class StayPageResponse {
     private int totalPages;
 
     public StayPageResponse() {
+        // Requerido para la deserializacion (Jackson)
     }
 
     public StayPageResponse(List<StayResponse> content, int page, int size,
