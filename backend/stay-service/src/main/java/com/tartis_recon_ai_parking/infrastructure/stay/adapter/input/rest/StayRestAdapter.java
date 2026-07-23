@@ -1,9 +1,13 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
+import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckOutResponse;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,10 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class StayRestAdapter {
 
     private final CheckInUseCase checkInUseCase;
+    private final CheckOutUseCase checkOutUseCase;
     private final StayRestMapper mapper;
 
-    public StayRestAdapter(CheckInUseCase checkInUseCase, StayRestMapper mapper) {
+    public StayRestAdapter(CheckInUseCase checkInUseCase, CheckOutUseCase checkOutUseCase, StayRestMapper mapper) {
         this.checkInUseCase = checkInUseCase;
+        this.checkOutUseCase = checkOutUseCase;
         this.mapper = mapper;
     }
 
@@ -45,5 +51,11 @@ public class StayRestAdapter {
         StayDTO stay = checkInUseCase.execute(mapper.toCreateDTO(request));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(mapper.toCheckInResponse(stay, request.plate));
+    }
+
+    @PostMapping("/check-out")
+    public ResponseEntity<CheckOutResponse> checkOut(@RequestBody StayCheckOutRequest request) {
+        CheckOutResultDTO result = checkOutUseCase.execute(mapper.toCheckOutDTO(request));
+        return ResponseEntity.ok(mapper.toCheckOutResponse(result, request.plate));
     }
 }

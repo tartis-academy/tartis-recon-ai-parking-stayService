@@ -1,11 +1,15 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckOutResponse;
 
 import org.springframework.stereotype.Component;
 
@@ -38,6 +42,23 @@ public class StayRestMapper {
                 dto.getCheckIn(),
                 dto.getStatus(),
                 null);
+    }
+
+    public StayCheckOutDTO toCheckOutDTO(StayCheckOutRequest request) {
+        return new StayCheckOutDTO(request.plate, request.entryTicketId);
+    }
+
+    public CheckOutResponse toCheckOutResponse(CheckOutResultDTO result, String plate) {
+        StayDTO dto = result.getStay();
+        return new CheckOutResponse(
+                dto.getStayId(),
+                plate,
+                dto.getCheckIn(),
+                dto.getCheckOut(),
+                result.getTotalMinutes(),
+                dto.getTotalAmount(),
+                result.getExitTicketId(),
+                dto.getStatus());
     }
 
     private static VehicleType parseVehicleType(String raw) {
