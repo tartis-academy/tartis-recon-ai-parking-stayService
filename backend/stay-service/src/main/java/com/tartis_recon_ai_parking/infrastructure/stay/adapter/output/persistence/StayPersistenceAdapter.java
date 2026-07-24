@@ -3,6 +3,10 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.persisten
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,5 +52,21 @@ public class StayPersistenceAdapter implements StayPersistence {
     @Override
     public Optional<Stay> findByVehicleIdAndStatus(UUID vehicleId, StayStatus status) {
         return repository.findByVehicleIdAndStatus(vehicleId, status).map(mapper::toDomain);
+    }
+
+    @Override
+    public StayPage findPage(StayStatus status, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "checkIn"));
+
+        Page<StayEntity> result = (status == null)
+                ? repository.findAll(pageable)
+                : repository.findByStatus(status, pageable);
+
+        List<Stay> content = result.getContent().stream()
+                .map(mapper::toDomain)
+                .toList();
+
+        return new StayPage(content, result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.getTotalPages());
     }
 }

@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.output.persistence;
 
+import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
@@ -14,6 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -120,5 +124,34 @@ class StayPersistenceAdapterTest {
 
         assertTrue(result.isPresent());
         assertEquals(vehicleId, result.get().getVehicleId());
+    }
+
+    @Test
+    void findPage_WithStatus_ShouldQueryByStatusAndMapPage() {
+        when(repository.findByStatus(eq(StayStatus.IN_PROGRESS), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(stayEntity), PageRequest.of(0, 20), 1));
+        when(mapper.toDomain(stayEntity)).thenReturn(stayDomain);
+
+        StayPersistence.StayPage result = adapter.findPage(StayStatus.IN_PROGRESS, 0, 20);
+
+        assertEquals(1, result.content().size());
+        assertEquals(stayId, result.content().get(0).getId());
+        assertEquals(0, result.page());
+        assertEquals(20, result.size());
+        assertEquals(1L, result.totalElements());
+        assertEquals(1, result.totalPages());
+        verify(repository).findByStatus(eq(StayStatus.IN_PROGRESS), any(Pageable.class));
+    }
+
+    @Test
+    void findPage_WithoutStatus_ShouldUseFindAll() {
+        when(repository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(stayEntity), PageRequest.of(0, 20), 1));
+        when(mapper.toDomain(stayEntity)).thenReturn(stayDomain);
+
+        StayPersistence.StayPage result = adapter.findPage(null, 0, 20);
+
+        assertEquals(1, result.content().size());
+        verify(repository).findAll(any(Pageable.class));
     }
 }

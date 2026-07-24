@@ -1,6 +1,8 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.persistence;
 
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
@@ -11,4 +13,6 @@ public interface StayRepository extends JpaRepository<StayEntity, UUID> {
     boolean existsByVehicleIdAndStatus(UUID vehicleId, StayStatus status);
 
     Optional<StayEntity> findByVehicleIdAndStatus(UUID vehicleId, StayStatus status);
+
+    Page<StayEntity> findByStatus(StayStatus status, Pageable pageable);
 }

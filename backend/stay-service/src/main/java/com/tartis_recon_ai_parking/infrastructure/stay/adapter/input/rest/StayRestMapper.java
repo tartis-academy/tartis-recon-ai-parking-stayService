@@ -4,15 +4,19 @@ import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckOutResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayPageResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
 
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * Traduce entre los DTOs HTTP del check-in y los DTOs de la capa de aplicacion,
@@ -77,6 +81,22 @@ public class StayRestMapper {
                 dto.getCheckIn(),
                 dto.getCheckOut(),
                 dto.getTotalAmount());
+    }
+
+    /**
+     * Traduce la pagina de aplicacion al contrato REST. {@code plate} viaja a null:
+     * el dominio no la guarda (misma convencion que el detalle por id).
+     */
+    public StayPageResponse toStayPageResponse(StayPageDTO page) {
+        List<StayResponse> content = page.getContent().stream()
+                .map(this::toStayResponse)
+                .toList();
+        return new StayPageResponse(
+                content,
+                page.getPage(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
     }
 
     private static VehicleType parseVehicleType(String raw) {
