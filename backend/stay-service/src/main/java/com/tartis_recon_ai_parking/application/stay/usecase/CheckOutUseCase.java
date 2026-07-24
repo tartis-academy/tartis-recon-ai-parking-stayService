@@ -53,7 +53,9 @@ public class CheckOutUseCase {
     public CheckOutResultDTO execute(StayCheckOutDTO command) {
         String plate = normalizePlate(command.getPlate());
 
-        VehicleInfo vehicle = vehiclePort.getOrCreateVehicle(plate, null);
+        VehicleInfo vehicle = vehiclePort.findByPlate(plate)
+                .orElseThrow(() -> new StayNotFoundException(
+                        "No existe ninguna estancia en curso para la matricula " + plate + " (HU-02 CA-02)"));
 
         Stay stay = stayPersistence.findByVehicleIdAndStatus(vehicle.vehicleId(), StayStatus.IN_PROGRESS)
                 .orElseThrow(() -> new StayNotFoundException(
@@ -67,9 +69,14 @@ public class CheckOutUseCase {
         Stay finished = stay.finish(checkOut, amount);
         Stay saved = stayPersistence.save(finished);
 
-        UUID exitTicketId = ticketPort.issueExitTicket(saved.getId(), command.getEntryTicketId());
-
-        releaseSpotQuietly(saved.getSpotId());
+        UUID exitTicketId;
+        try {
+            exitTicketId = ticketPort.issueExitTicket(saved.getId(), command.getEntryTicketId());
+        } finally {
+            // La plaza debe liberarse aunque falle la emision del ticket: la
+            // estancia ya quedo FINISHED (inmutable) y no debe quedar bloqueada.
+            releaseSpotQuietly(saved.getSpotId());
+        }
 
         return new CheckOutResultDTO(stayDTOFactory.create(saved), exitTicketId, totalMinutes);
     }

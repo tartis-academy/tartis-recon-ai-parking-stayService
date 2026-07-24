@@ -84,8 +84,8 @@ class CheckOutUseCaseTest {
     @DisplayName("Debe cerrar la estancia: calcula importe, finaliza, libera plaza y emite ticket de salida")
     void shouldCheckOutActiveStay() {
         UUID exitTicketId = UUID.randomUUID();
-        when(vehiclePort.getOrCreateVehicle(PLATE, null))
-                .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true));
+        when(vehiclePort.findByPlate(PLATE))
+                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
         when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
@@ -106,8 +106,8 @@ class CheckOutUseCaseTest {
     @Test
     @DisplayName("Debe lanzar StayNotFoundException si no hay estancia en curso para la matricula")
     void shouldFailWhenNoActiveStay() {
-        when(vehiclePort.getOrCreateVehicle(PLATE, null))
-                .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true));
+        when(vehiclePort.findByPlate(PLATE))
+                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.empty());
 
@@ -116,6 +116,35 @@ class CheckOutUseCaseTest {
 
         verify(stayPersistence, never()).save(any());
         verifyNoInteractions(spotPort, ticketPort);
+    }
+
+    @Test
+    @DisplayName("Debe lanzar StayNotFoundException si la matricula no existe en vehicle-service, sin tocar persistence")
+    void shouldFailWhenVehicleUnknown() {
+        when(vehiclePort.findByPlate(PLATE)).thenReturn(Optional.empty());
+
+        assertThrows(StayNotFoundException.class,
+                () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
+
+        verifyNoInteractions(stayPersistence, tariffPort, spotPort, ticketPort);
+    }
+
+    @Test
+    @DisplayName("Debe liberar la plaza aunque falle la emision del ticket de salida")
+    void shouldReleaseSpotEvenWhenTicketIssuanceFails() {
+        when(vehiclePort.findByPlate(PLATE))
+                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
+        when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(inProgressStay()));
+        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ticketPort.issueExitTicket(eq(stayId), any()))
+                .thenThrow(new IllegalStateException("ticket-service no disponible"));
+
+        assertThrows(IllegalStateException.class,
+                () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
+
+        verify(spotPort).releaseSpot(spotId);
     }
 
     @Test

@@ -10,6 +10,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class StayVehicleClientAdapter implements StayVehiclePort {
@@ -46,17 +47,35 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
                 .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
     }
 
-    if (response == null || response.uniqueId() == null) {
-        throw new IllegalStateException("Respuesta inválida de vehicle-service");
+    return toVehicleInfo(response, plate, vehicleType);
+}
+
+    @Override
+    public Optional<VehicleInfo> findByPlate(String plate) {
+        try {
+            VehicleResponse response = restClient.get()
+                    .uri("/v1/vehicles/plate/{plate}", plate)
+                    .retrieve()
+                    .body(VehicleResponse.class);
+
+            return Optional.of(toVehicleInfo(response, plate, null));
+        } catch (HttpClientErrorException.NotFound e) {
+            return Optional.empty();
+        }
     }
 
-    VehicleType type = response.type() != null ? VehicleType.valueOf(response.type()) : vehicleType;
+    private static VehicleInfo toVehicleInfo(VehicleResponse response, String plate, VehicleType fallbackType) {
+        if (response == null || response.uniqueId() == null) {
+            throw new IllegalStateException("Respuesta inválida de vehicle-service");
+        }
 
-    return new VehicleInfo(
-            response.uniqueId(),
-            response.plate() != null ? response.plate() : plate,
-            type,
-            response.isActive()
-    );
-}
+        VehicleType type = response.type() != null ? VehicleType.valueOf(response.type()) : fallbackType;
+
+        return new VehicleInfo(
+                response.uniqueId(),
+                response.plate() != null ? response.plate() : plate,
+                type,
+                response.isActive()
+        );
+    }
 }
