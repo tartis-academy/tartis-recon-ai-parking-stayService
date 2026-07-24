@@ -2,9 +2,11 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
+import com.tartis_recon_ai_parking.application.stay.usecase.ListStaysUseCase;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
@@ -24,9 +26,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -46,6 +50,7 @@ class StayRestAdapterWebTest {
     private CheckInUseCase checkInUseCase;
     private CheckOutUseCase checkOutUseCase;
     private GetStayUseCase getStayUseCase;
+    private ListStaysUseCase listStaysUseCase;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -53,8 +58,10 @@ class StayRestAdapterWebTest {
         checkInUseCase = Mockito.mock(CheckInUseCase.class);
         checkOutUseCase = Mockito.mock(CheckOutUseCase.class);
         getStayUseCase = Mockito.mock(GetStayUseCase.class);
+        listStaysUseCase = Mockito.mock(ListStaysUseCase.class);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new StayRestAdapter(checkInUseCase, checkOutUseCase, getStayUseCase, new StayRestMapper()))
+                .standaloneSetup(new StayRestAdapter(checkInUseCase, checkOutUseCase, getStayUseCase,
+                        listStaysUseCase, new StayRestMapper()))
                 .setControllerAdvice(new CustomizedExceptionAdapter())
                 .build();
     }
@@ -186,5 +193,41 @@ class StayRestAdapterWebTest {
         mockMvc.perform(get("/v1/stays/{stayId}", stayId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays -> 200 con la pagina de estancias filtrada por status (HU-08)")
+    void listStays_returns200() throws Exception {
+        UUID stayId = UUID.randomUUID();
+        StayDTO dto = new StayDTO(
+                stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(),
+                Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
+        when(listStaysUseCase.execute(eq(StayStatus.IN_PROGRESS), eq(0), eq(20)))
+                .thenReturn(new StayPageDTO(List.of(dto), 0, 20, 1L, 1));
+
+        mockMvc.perform(get("/v1/stays")
+                        .param("status", "IN_PROGRESS")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].stayId").value(stayId.toString()))
+                .andExpect(jsonPath("$.content[0].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays sin params -> 200 usando page=0 size=20 y sin filtro de status")
+    void listStays_defaults_returns200() throws Exception {
+        when(listStaysUseCase.execute(eq(null), eq(0), eq(20)))
+                .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
+
+        mockMvc.perform(get("/v1/stays"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20));
     }
 }

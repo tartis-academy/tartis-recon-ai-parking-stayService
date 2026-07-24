@@ -10,6 +10,7 @@ import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetActiveStayUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
+import com.tartis_recon_ai_parking.application.stay.usecase.ListStaysUseCase;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -69,5 +70,10 @@ public class StayUseCaseConfiguration {
     @Bean
     GetStayUseCase getStayUseCase(StayPersistence stayPersistence, StayDTOFactory stayDTOFactory) {
         return new GetStayUseCase(stayPersistence, stayDTOFactory);
+    }
+
+    @Bean
+    ListStaysUseCase listStaysUseCase(StayPersistence stayPersistence, StayDTOFactory stayDTOFactory) {
+        return new ListStaysUseCase(stayPersistence, stayDTOFactory);
     }
 }
