@@ -10,11 +10,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -75,8 +77,51 @@ class StayTariffClientAdapterTest {
                 .andRespond(withSuccess(emptyJsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN & THEN
-        assertThrows(IllegalStateException.class, () -> 
+        assertThrows(IllegalStateException.class, () ->
             stayTariffClientAdapter.getActiveTariffId(VehicleType.MOTORBIKE)
+        );
+
+        server.verify();
+    }
+
+    @Test
+    void shouldCalculateAmountSuccessfully() {
+        // GIVEN
+        UUID tariffId = UUID.randomUUID();
+
+        // stay envia { vehicleType, totalMinutes } y tariff devuelve { tariffId, amount }
+        String jsonResponse = """
+                {
+                    "tariffId": "%s",
+                    "amount": 2.80
+                }
+                """.formatted(tariffId);
+
+        server.expect(requestTo("http://tariff-service:8080/v1/tariffs/calculate"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("{\"vehicleType\":\"CAR\",\"totalMinutes\":90}"))
+                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+        // WHEN
+        BigDecimal amount = stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L);
+
+        // THEN
+        assertEquals(0, amount.compareTo(new BigDecimal("2.80")));
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowExceptionWhenTariffReturnsNoAmount() {
+        // GIVEN: respuesta sin amount
+        String jsonResponse = "{}";
+
+        server.expect(requestTo("http://tariff-service:8080/v1/tariffs/calculate"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+        // WHEN & THEN
+        assertThrows(IllegalStateException.class, () ->
+            stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L)
         );
 
         server.verify();
