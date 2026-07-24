@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -93,6 +94,47 @@ void shouldCreateVehicleWhenNotFoundByPlate() {
     // THEN
     assertNotNull(vehicleInfo);
     assertEquals(expectedVehicleId, vehicleInfo.vehicleId());
+    server.verify();
+}
+
+@Test
+void shouldFindVehicleByPlate() {
+    // GIVEN
+    UUID expectedVehicleId = UUID.randomUUID();
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(expectedVehicleId);
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    Optional<StayVehiclePort.VehicleInfo> vehicleInfo = stayVehicleClientAdapter.findByPlate("1234ABC");
+
+    // THEN
+    assertTrue(vehicleInfo.isPresent());
+    assertEquals(expectedVehicleId, vehicleInfo.get().vehicleId());
+    server.verify();
+}
+
+@Test
+void shouldReturnEmptyWhenPlateNotFound() {
+    // GIVEN: vehicle-service no conoce la matricula (no debe crearla)
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    // WHEN
+    Optional<StayVehiclePort.VehicleInfo> vehicleInfo = stayVehicleClientAdapter.findByPlate("1234ABC");
+
+    // THEN
+    assertTrue(vehicleInfo.isEmpty());
     server.verify();
 }
 }

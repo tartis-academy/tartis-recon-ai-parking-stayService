@@ -4,9 +4,11 @@ import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetActiveStayUseCase;
+import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
 
 import org.springframework.context.annotation.Bean;
@@ -41,6 +43,14 @@ public class StayUseCaseConfiguration {
     GetActiveStayUseCase getActiveStayUseCase(StayPersistence stayPersistence,
                                                StayDTOFactory stayDTOFactory) {
         return new GetActiveStayUseCase(stayPersistence, stayDTOFactory);
+    CheckOutUseCase checkOutUseCase(StayPersistence stayPersistence,
+                                    StayVehiclePort vehiclePort,
+                                    StayTariffPort tariffPort,
+                                    StaySpotPort spotPort,
+                                    StayTicketPort ticketPort,
+                                    StayDTOFactory stayDTOFactory,
+                                    Clock clock) {
+        return new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, spotPort, ticketPort, stayDTOFactory, clock);
     }
 
     /**
