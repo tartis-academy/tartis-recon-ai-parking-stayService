@@ -36,19 +36,18 @@ public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issue
 
     @Override
     public UUID issueExitTicket(UUID stayId, UUID entryTicketId) {
+        // TicketRequest de ticket-service (POST /v1/tickets) solo acepta stayId;
+        // entryTicketId no forma parte de su contrato todavia.
         Map<?, ?> response = restClient.post()
-                .uri("/v1/tickets/exit")
-                .body(Map.of(
-                        "stayId", stayId.toString(),
-                        "entryTicketId", entryTicketId != null ? entryTicketId.toString() : ""
-                ))
+                .uri("/v1/tickets")
+                .body(Map.of("stayId", stayId.toString()))
                 .retrieve()
                 .body(Map.class);
 
-        if (response == null || !response.containsKey("exitTicketId")) {
+        if (response == null || !response.containsKey("uniqueId")) {
             throw new IllegalStateException("Error al generar el ticket de salida");
         }
 
-        return UUID.fromString((String) response.get("exitTicketId"));
+        return UUID.fromString((String) response.get("uniqueId"));
     }
 }
