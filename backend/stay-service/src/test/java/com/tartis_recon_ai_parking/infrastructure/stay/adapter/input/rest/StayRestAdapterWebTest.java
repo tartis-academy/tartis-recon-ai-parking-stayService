@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
+import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
@@ -27,6 +28,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,14 +45,16 @@ class StayRestAdapterWebTest {
 
     private CheckInUseCase checkInUseCase;
     private CheckOutUseCase checkOutUseCase;
+    private GetStayUseCase getStayUseCase;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         checkInUseCase = Mockito.mock(CheckInUseCase.class);
         checkOutUseCase = Mockito.mock(CheckOutUseCase.class);
+        getStayUseCase = Mockito.mock(GetStayUseCase.class);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new StayRestAdapter(checkInUseCase, checkOutUseCase, new StayRestMapper()))
+                .standaloneSetup(new StayRestAdapter(checkInUseCase, checkOutUseCase, getStayUseCase, new StayRestMapper()))
                 .setControllerAdvice(new CustomizedExceptionAdapter())
                 .build();
     }
@@ -153,6 +157,33 @@ class StayRestAdapterWebTest {
         mockMvc.perform(post("/v1/stays/check-out")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays/{id} -> 200 con el detalle de la estancia (HU-08)")
+    void getStay_returns200() throws Exception {
+        UUID stayId = UUID.randomUUID();
+        UUID spotId = UUID.randomUUID();
+        when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(
+                stayId, UUID.randomUUID(), VehicleType.CAR, spotId, UUID.randomUUID(),
+                Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS));
+
+        mockMvc.perform(get("/v1/stays/{stayId}", stayId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stayId").value(stayId.toString()))
+                .andExpect(jsonPath("$.spotId").value(spotId.toString()))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays/{id} -> 404 si no existe la estancia")
+    void getStay_notFound_returns404() throws Exception {
+        UUID stayId = UUID.randomUUID();
+        when(getStayUseCase.execute(stayId)).thenThrow(StayNotFoundException.withId(stayId));
+
+        mockMvc.perform(get("/v1/stays/{stayId}", stayId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }

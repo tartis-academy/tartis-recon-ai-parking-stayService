@@ -7,6 +7,7 @@ import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -78,6 +79,24 @@ class StayRestMapperTest {
         assertEquals(checkIn, response.getCheckIn());
         assertEquals(StayStatus.IN_PROGRESS, response.getStatus());
         assertNull(response.getEntryTicket());
+    }
+
+    @Test
+    @DisplayName("toStayResponse: mapea los campos y deja plate a null (no vive en el dominio)")
+    void toStayResponse_mapsFields() {
+        UUID stayId = UUID.randomUUID();
+        UUID spotId = UUID.randomUUID();
+        Instant checkIn = Instant.parse("2026-07-23T08:30:00Z");
+        StayDTO dto = new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, spotId,
+                UUID.randomUUID(), checkIn, null, null, StayStatus.IN_PROGRESS);
+
+        StayResponse response = mapper.toStayResponse(dto);
+
+        assertEquals(stayId, response.getStayId());
+        assertNull(response.getPlate());
+        assertEquals(spotId, response.getSpotId());
+        assertEquals(checkIn, response.getCheckIn());
+        assertEquals(StayStatus.IN_PROGRESS, response.getStatus());
     }
 
     private static StayRequest request(String plate, String vehicleType) {
