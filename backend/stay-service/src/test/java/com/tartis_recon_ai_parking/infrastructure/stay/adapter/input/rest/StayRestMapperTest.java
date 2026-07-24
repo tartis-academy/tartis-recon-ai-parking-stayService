@@ -1,13 +1,19 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckOutResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
+
+import java.math.BigDecimal;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -97,6 +103,42 @@ class StayRestMapperTest {
         assertEquals(spotId, response.getSpotId());
         assertEquals(checkIn, response.getCheckIn());
         assertEquals(StayStatus.IN_PROGRESS, response.getStatus());
+    }
+
+    @Test
+    @DisplayName("toCheckOutDTO: mapea los campos de la peticion")
+    void toCheckOutDTO_mapsFields() {
+        StayCheckOutRequest req = new StayCheckOutRequest();
+        req.plate = "1234ABC";
+        req.entryTicketId = UUID.randomUUID();
+
+        StayCheckOutDTO dto = mapper.toCheckOutDTO(req);
+
+        assertEquals("1234ABC", dto.getPlate());
+        assertEquals(req.entryTicketId, dto.getEntryTicketId());
+    }
+
+    @Test
+    @DisplayName("toCheckOutResponse: mapea los campos del resultado del checkout")
+    void toCheckOutResponse_mapsFields() {
+        UUID stayId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
+        Instant checkIn = Instant.parse("2026-07-23T08:30:00Z");
+        Instant checkOut = Instant.parse("2026-07-23T10:00:00Z");
+        StayDTO dto = new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(),
+                UUID.randomUUID(), checkIn, checkOut, new BigDecimal("3.00"), StayStatus.FINISHED);
+        CheckOutResultDTO result = new CheckOutResultDTO(dto, ticketId, 90L);
+
+        CheckOutResponse response = mapper.toCheckOutResponse(result, "1234ABC");
+
+        assertEquals(stayId, response.getStayId());
+        assertEquals("1234ABC", response.getPlate());
+        assertEquals(checkIn, response.getCheckIn());
+        assertEquals(checkOut, response.getCheckOut());
+        assertEquals(90L, response.getTotalMinutes());
+        assertEquals(new BigDecimal("3.00"), response.getAmount());
+        assertEquals(ticketId, response.getTicketId());
+        assertEquals(StayStatus.FINISHED, response.getStatus());
     }
 
     private static StayRequest request(String plate, String vehicleType) {
