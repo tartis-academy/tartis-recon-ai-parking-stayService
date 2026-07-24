@@ -45,28 +45,14 @@ public class StayRestMapper {
                 null);
     }
 
-    public StayCheckOutDTO toCheckOutDTO(StayCheckOutRequest request) {
-        return new StayCheckOutDTO(request.plate, request.entryTicketId);
-    }
-
-    public CheckOutResponse toCheckOutResponse(CheckOutResultDTO result, String plate) {
-        StayDTO dto = result.getStay();
-        return new CheckOutResponse(
-                dto.getStayId(),
-                plate,
-                dto.getCheckIn(),
-                dto.getCheckOut(),
-                result.getTotalMinutes(),
-                dto.getTotalAmount(),
-                result.getExitTicketId(),
-                dto.getStatus());
-    }
-
-    /** {@code plate} queda a null: el dominio no la guarda (ver {@link #toCheckInResponse}). */
     public StayResponse toStayResponse(StayDTO dto) {
+        return toStayResponse(dto, null);
+    }
+
+    public StayResponse toStayResponse(StayDTO dto, String plate) {
         return new StayResponse(
                 dto.getStayId(),
-                null,
+                plate,
                 dto.getVehicleId(),
                 dto.getSpotId(),
                 dto.getTariffId(),
