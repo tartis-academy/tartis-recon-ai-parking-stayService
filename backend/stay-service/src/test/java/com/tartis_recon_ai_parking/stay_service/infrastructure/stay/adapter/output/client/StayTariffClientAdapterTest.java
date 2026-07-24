@@ -86,20 +86,16 @@ class StayTariffClientAdapterTest {
 
     @Test
     void shouldCalculateAmountSuccessfully() {
-        // GIVEN
-        UUID tariffId = UUID.randomUUID();
-
-        // stay envia { vehicleType, totalMinutes } y tariff devuelve { tariffId, amount }
+        // GIVEN: stay envia { type, minutes } y tariff (PriceResponse) devuelve solo { price }
         String jsonResponse = """
                 {
-                    "tariffId": "%s",
-                    "amount": 2.80
+                    "price": 2.80
                 }
-                """.formatted(tariffId);
+                """;
 
         server.expect(requestTo("http://tariff-service:8080/v1/tariffs/calculate"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(content().json("{\"vehicleType\":\"CAR\",\"totalMinutes\":90}"))
+                .andExpect(content().json("{\"type\":\"CAR\",\"minutes\":90}"))
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN
@@ -112,7 +108,7 @@ class StayTariffClientAdapterTest {
 
     @Test
     void shouldThrowExceptionWhenTariffReturnsNoAmount() {
-        // GIVEN: respuesta sin amount
+        // GIVEN: respuesta sin price
         String jsonResponse = "{}";
 
         server.expect(requestTo("http://tariff-service:8080/v1/tariffs/calculate"))

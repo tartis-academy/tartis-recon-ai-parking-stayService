@@ -45,11 +45,11 @@ public class StayTariffClientAdapter implements StayTariffPort {
                 .retrieve()
                 .body(CalculateAmountResponse.class);
 
-        if (response == null || response.amount() == null) {
+        if (response == null || response.price() == null) {
             throw new IllegalStateException(
                     "tariff-service no devolvió importe para el tipo de vehículo: " + vehicleType);
         }
 
-        return response.amount();
+        return response.price();
     }
 }
