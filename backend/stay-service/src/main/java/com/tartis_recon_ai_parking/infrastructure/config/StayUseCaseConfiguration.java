@@ -43,6 +43,9 @@ public class StayUseCaseConfiguration {
     GetActiveStayUseCase getActiveStayUseCase(StayPersistence stayPersistence,
                                                StayDTOFactory stayDTOFactory) {
         return new GetActiveStayUseCase(stayPersistence, stayDTOFactory);
+    }
+
+    @Bean
     CheckOutUseCase checkOutUseCase(StayPersistence stayPersistence,
                                     StayVehiclePort vehiclePort,
                                     StayTariffPort tariffPort,

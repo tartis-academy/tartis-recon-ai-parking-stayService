@@ -45,6 +45,23 @@ public class StayRestMapper {
                 null);
     }
 
+    public StayCheckOutDTO toCheckOutDTO(StayCheckOutRequest request) {
+        return new StayCheckOutDTO(request.plate, request.entryTicketId);
+    }
+
+    public CheckOutResponse toCheckOutResponse(CheckOutResultDTO result, String plate) {
+        StayDTO stay = result.getStay();
+        return new CheckOutResponse(
+                stay.getStayId(),
+                plate,
+                stay.getCheckIn(),
+                stay.getCheckOut(),
+                result.getTotalMinutes(),
+                stay.getTotalAmount(),
+                result.getExitTicketId(),
+                stay.getStatus());
+    }
+
     public StayResponse toStayResponse(StayDTO dto) {
         return toStayResponse(dto, null);
     }
