@@ -63,14 +63,15 @@ class StayTicketClientAdapterTest {
 
     @Test
     void shouldIssueExitTicket() {
-        // GIVEN
+        // GIVEN: TicketRequest de ticket-service (POST /v1/tickets) solo acepta
+        // stayId, y TicketResponse identifica el ticket como "uniqueId".
         UUID stayId = UUID.randomUUID();
         UUID entryTicketId = UUID.randomUUID();
         UUID expectedExitTicketId = UUID.randomUUID();
 
-        String jsonResponse = "{\"exitTicketId\": \"" + expectedExitTicketId + "\"}";
+        String jsonResponse = "{\"uniqueId\": \"" + expectedExitTicketId + "\"}";
 
-        server.expect(requestTo("http://ticket-service:8080/v1/tickets/exit"))
+        server.expect(requestTo("http://ticket-service:8080/v1/tickets"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
