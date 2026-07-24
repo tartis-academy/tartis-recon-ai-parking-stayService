@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -80,6 +81,24 @@ class StayTicketClientAdapterTest {
 
         // THEN
         assertEquals(expectedExitTicketId, exitTicketId);
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowExceptionWhenTicketServiceReturnsNoUniqueId() {
+        // GIVEN: respuesta sin uniqueId
+        UUID stayId = UUID.randomUUID();
+        UUID entryTicketId = UUID.randomUUID();
+
+        server.expect(requestTo("http://ticket-service:8080/v1/tickets"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        // WHEN & THEN
+        assertThrows(IllegalStateException.class, () ->
+            stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId)
+        );
+
         server.verify();
     }
 }
