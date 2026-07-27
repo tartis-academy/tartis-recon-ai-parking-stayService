@@ -1,11 +1,13 @@
 package com.tartis_recon_ai_parking.application.stay.usecase;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.EntryTicketDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
-import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort.VehicleInfo;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
@@ -49,6 +51,7 @@ public class CheckInUseCase {
     private final StayVehiclePort vehiclePort;
     private final StaySpotPort spotPort;
     private final StayTariffPort tariffPort;
+    private final StayTicketPort ticketPort;
     private final StayDTOFactory stayDTOFactory;
     private final Clock clock;
 
@@ -56,12 +59,14 @@ public class CheckInUseCase {
                           StayVehiclePort vehiclePort,
                           StaySpotPort spotPort,
                           StayTariffPort tariffPort,
+                          StayTicketPort ticketPort,
                           StayDTOFactory stayDTOFactory,
                           Clock clock) {
         this.stayPersistence = stayPersistence;
         this.vehiclePort = vehiclePort;
         this.spotPort = spotPort;
         this.tariffPort = tariffPort;
+        this.ticketPort = ticketPort;
         this.stayDTOFactory = stayDTOFactory;
         this.clock = clock;
     }
@@ -73,7 +78,7 @@ public class CheckInUseCase {
      *         no hay plazas para su tipo (RN-01, CA-01 de HU-01)
      * @throws InvalidStayException         la matricula viene vacia
      */
-    public StayDTO execute(StayCreateDTO command) {
+    public CheckInResultDTO execute(StayCreateDTO command) {
         String plate = normalizePlate(command.getPlate());
 
         // 1. Resolver el vehiculo. El puerto hace el GET /v1/vehicles/plate/{plate}
@@ -110,7 +115,17 @@ public class CheckInUseCase {
                     clock.instant());
 
             Stay saved = stayPersistence.save(stay);
-            return stayDTOFactory.create(saved);
+
+            // 6. Ticket de entrada (HU-01 CA3): sin el, el conductor no puede
+            //    justificar la hora de entrada al salir. Un fallo aqui tambien
+            //    compensa liberando la plaza, igual que un fallo al persistir.
+            StayTicketPort.EntryTicketInfo ticket =
+                    ticketPort.issueEntryTicket(saved.getId(), plate, saved.getCheckIn());
+
+            EntryTicketDTO entryTicket = new EntryTicketDTO(
+                    ticket.ticketId(), ticket.barCode(), ticket.issuedAt());
+
+            return new CheckInResultDTO(stayDTOFactory.create(saved), entryTicket);
 
         } catch (RuntimeException e) {
             releaseQuietly(spotId, e);

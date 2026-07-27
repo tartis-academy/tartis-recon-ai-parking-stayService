@@ -27,9 +27,25 @@ public class StayDTO {
 
 	private final StayStatus status;
 
+	private final String plate;
+
+	/**
+	 * El dominio {@code Stay} no guarda la matricula (solo {@code vehicleId}); este
+	 * constructor la deja a null para los llamantes que no la resuelven.
+	 */
 	public StayDTO(final UUID stayId, final UUID vehicleId, final VehicleType vehicleType,
 			final UUID spotId, final UUID tariffId, final Instant checkIn, final Instant checkOut,
 			final BigDecimal totalAmount, final StayStatus status) {
+		this(stayId, vehicleId, vehicleType, spotId, tariffId, checkIn, checkOut, totalAmount, status, null);
+	}
+
+	/**
+	 * Con {@code plate} ya resuelta (p.ej. por consulta a vehicle-service) para las
+	 * respuestas de detalle/listado de estancias.
+	 */
+	public StayDTO(final UUID stayId, final UUID vehicleId, final VehicleType vehicleType,
+			final UUID spotId, final UUID tariffId, final Instant checkIn, final Instant checkOut,
+			final BigDecimal totalAmount, final StayStatus status, final String plate) {
 		this.stayId = stayId;
 		this.vehicleId = vehicleId;
 		this.vehicleType = vehicleType;
@@ -39,6 +55,7 @@ public class StayDTO {
 		this.checkOut = checkOut;
 		this.totalAmount = totalAmount;
 		this.status = status;
+		this.plate = plate;
 	}
 
 	public UUID getStayId() {
@@ -75,6 +92,10 @@ public class StayDTO {
 
 	public StayStatus getStatus() {
 		return this.status;
+	}
+
+	public String getPlate() {
+		return this.plate;
 	}
 
 }

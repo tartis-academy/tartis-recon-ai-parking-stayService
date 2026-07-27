@@ -137,4 +137,47 @@ void shouldReturnEmptyWhenPlateNotFound() {
     assertTrue(vehicleInfo.isEmpty());
     server.verify();
 }
+
+@Test
+void shouldFindVehicleById() {
+    // GIVEN
+    UUID vehicleId = UUID.randomUUID();
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(vehicleId);
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/" + vehicleId))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    Optional<StayVehiclePort.VehicleInfo> vehicleInfo = stayVehicleClientAdapter.findById(vehicleId);
+
+    // THEN
+    assertTrue(vehicleInfo.isPresent());
+    assertEquals(vehicleId, vehicleInfo.get().vehicleId());
+    assertEquals("1234ABC", vehicleInfo.get().plate());
+    server.verify();
+}
+
+@Test
+void shouldReturnEmptyWhenVehicleIdNotFound() {
+    // GIVEN
+    UUID vehicleId = UUID.randomUUID();
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/" + vehicleId))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    // WHEN
+    Optional<StayVehiclePort.VehicleInfo> vehicleInfo = stayVehicleClientAdapter.findById(vehicleId);
+
+    // THEN
+    assertTrue(vehicleInfo.isEmpty());
+    server.verify();
+}
 }

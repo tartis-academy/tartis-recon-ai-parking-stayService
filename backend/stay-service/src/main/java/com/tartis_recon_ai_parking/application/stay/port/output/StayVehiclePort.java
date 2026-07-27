@@ -15,5 +15,11 @@ public interface StayVehiclePort {
      */
     Optional<VehicleInfo> findByPlate(String plate);
 
+    /**
+     * Busca el vehículo por id, para resolver la matrícula a mostrar en las
+     * consultas de estancias (el dominio de stay no la guarda). Vacío si no existe.
+     */
+    Optional<VehicleInfo> findById(UUID vehicleId);
+
     record VehicleInfo(UUID vehicleId, String plate, VehicleType vehicleType, boolean active) {}
 }

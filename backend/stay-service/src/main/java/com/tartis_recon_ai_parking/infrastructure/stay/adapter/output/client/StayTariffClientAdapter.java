@@ -6,6 +6,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.C
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.CalculateAmountResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.TariffResponse;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -19,8 +20,11 @@ public class StayTariffClientAdapter implements StayTariffPort {
 
     private final RestClient restClient;
 
-    public StayTariffClientAdapter(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.baseUrl("http://tariff-service:8080").build();
+    public StayTariffClientAdapter(
+            RestClient.Builder restClientBuilder,
+            @Value("${services.tariff.url:http://tariff-service:8080}") String tariffServiceUrl
+    ) {
+        this.restClient = restClientBuilder.baseUrl(tariffServiceUrl).build();
     }
 
     @Override

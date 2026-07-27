@@ -1,11 +1,13 @@
 package com.tartis_recon_ai_parking.application.stay.usecase;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
-import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort.EntryTicketInfo;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort.VehicleInfo;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
@@ -66,6 +68,9 @@ class CheckInUseCaseTest {
     @Mock
     private StayTariffPort tariffPort;
 
+    @Mock
+    private StayTicketPort ticketPort;
+
     private CheckInUseCase useCase;
 
     private UUID vehicleId;
@@ -77,8 +82,14 @@ class CheckInUseCaseTest {
         vehicleId = UUID.randomUUID();
         spotId = UUID.randomUUID();
         tariffId = UUID.randomUUID();
-        useCase = new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort,
+        useCase = new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort,
                 new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    /** Emisión de ticket por defecto para los caminos que llegan a persistir la estancia. */
+    private void givenTicketIssued() {
+        when(ticketPort.issueEntryTicket(any(), any(), any()))
+                .thenReturn(new EntryTicketInfo(UUID.randomUUID(), "BC-0001", NOW));
     }
 
     // ------------------------------------------------------------------
@@ -86,25 +97,32 @@ class CheckInUseCaseTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("vehiculo activo y con plaza libre: abre estancia IN_PROGRESS")
+    @DisplayName("vehiculo activo y con plaza libre: abre estancia IN_PROGRESS y emite ticket de entrada")
     void shouldOpenStay_whenVehicleActiveAndSpotAvailable() {
         givenVehicle(VehicleType.CAR, true);
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
         when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        UUID ticketId = UUID.randomUUID();
+        when(ticketPort.issueEntryTicket(any(), eq(PLATE), eq(NOW)))
+                .thenReturn(new EntryTicketInfo(ticketId, "BC-0001", NOW));
 
-        StayDTO result = useCase.execute(new StayCreateDTO(PLATE, null));
+        CheckInResultDTO result = useCase.execute(new StayCreateDTO(PLATE, null));
 
-        assertNotNull(result.getStayId());
-        assertEquals(vehicleId, result.getVehicleId());
-        assertEquals(spotId, result.getSpotId());
-        assertEquals(tariffId, result.getTariffId());
-        assertEquals(StayStatus.IN_PROGRESS, result.getStatus());
-        assertEquals(NOW, result.getCheckIn());
+        assertNotNull(result.getStay().getStayId());
+        assertEquals(vehicleId, result.getStay().getVehicleId());
+        assertEquals(spotId, result.getStay().getSpotId());
+        assertEquals(tariffId, result.getStay().getTariffId());
+        assertEquals(StayStatus.IN_PROGRESS, result.getStay().getStatus());
+        assertEquals(NOW, result.getStay().getCheckIn());
         // IN-14 / IN-16: una estancia en curso no tiene ni salida ni importe.
-        assertNull(result.getCheckOut());
-        assertNull(result.getTotalAmount());
+        assertNull(result.getStay().getCheckOut());
+        assertNull(result.getStay().getTotalAmount());
+        // El ticket de entrada emitido por ticket-service llega hasta el resultado.
+        assertEquals(ticketId, result.getEntryTicket().getTicketId());
+        assertEquals("BC-0001", result.getEntryTicket().getBarCode());
+        assertEquals(NOW, result.getEntryTicket().getIssuedAt());
     }
 
     @Test
@@ -117,10 +135,11 @@ class CheckInUseCaseTest {
         when(spotPort.occupySpot(VehicleType.MOTORBIKE)).thenReturn(spotId);
         when(tariffPort.getActiveTariffId(VehicleType.MOTORBIKE)).thenReturn(tariffId);
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        givenTicketIssued();
 
-        StayDTO result = useCase.execute(new StayCreateDTO(PLATE, VehicleType.CAR));
+        CheckInResultDTO result = useCase.execute(new StayCreateDTO(PLATE, VehicleType.CAR));
 
-        assertEquals(VehicleType.MOTORBIKE, result.getVehicleType());
+        assertEquals(VehicleType.MOTORBIKE, result.getStay().getVehicleType());
         verify(spotPort).occupySpot(VehicleType.MOTORBIKE);
     }
 
@@ -133,6 +152,7 @@ class CheckInUseCaseTest {
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
         when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        givenTicketIssued();
 
         useCase.execute(new StayCreateDTO(" 1234 abc ", null));
 
@@ -153,6 +173,7 @@ class CheckInUseCaseTest {
 
         // No hay plaza que compensar: nunca se ocupo ninguna.
         verifyNoInteractions(spotPort);
+        verifyNoInteractions(ticketPort);
         verify(stayPersistence, never()).save(any());
     }
 
@@ -167,6 +188,7 @@ class CheckInUseCaseTest {
                 () -> useCase.execute(new StayCreateDTO(PLATE, null)));
 
         verifyNoInteractions(spotPort);
+        verifyNoInteractions(ticketPort);
         verify(stayPersistence, never()).save(any());
     }
 
@@ -183,6 +205,7 @@ class CheckInUseCaseTest {
 
         verify(stayPersistence, never()).save(any());
         verify(spotPort, never()).releaseSpot(any());
+        verifyNoInteractions(ticketPort);
     }
 
     @Test
@@ -191,7 +214,7 @@ class CheckInUseCaseTest {
         assertThrows(InvalidStayException.class,
                 () -> useCase.execute(new StayCreateDTO("  ", VehicleType.CAR)));
 
-        verifyNoInteractions(vehiclePort, spotPort, stayPersistence, tariffPort);
+        verifyNoInteractions(vehiclePort, spotPort, stayPersistence, tariffPort, ticketPort);
     }
 
     // ------------------------------------------------------------------
@@ -212,6 +235,24 @@ class CheckInUseCaseTest {
                 () -> useCase.execute(new StayCreateDTO(PLATE, null)));
 
         // Sin esto la plaza quedaria OCCUPIED sin estancia asociada (IN-25).
+        verify(spotPort).releaseSpot(spotId);
+        verifyNoInteractions(ticketPort);
+    }
+
+    @Test
+    @DisplayName("si falla la emision del ticket de entrada, libera la plaza igualmente (IN-25)")
+    void shouldReleaseSpot_whenEntryTicketCannotBeIssued() {
+        givenVehicle(VehicleType.CAR, true);
+        givenNoActiveStay();
+        when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
+        when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
+        when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ticketPort.issueEntryTicket(any(), any(), any()))
+                .thenThrow(new IllegalStateException("ticket-service caido"));
+
+        assertThrows(IllegalStateException.class,
+                () -> useCase.execute(new StayCreateDTO(PLATE, null)));
+
         verify(spotPort).releaseSpot(spotId);
     }
 
@@ -242,6 +283,7 @@ class CheckInUseCaseTest {
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
         when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        givenTicketIssued();
 
         useCase.execute(new StayCreateDTO(PLATE, null));
 

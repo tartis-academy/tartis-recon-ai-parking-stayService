@@ -1,6 +1,8 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.EntryTicketDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
@@ -69,40 +71,54 @@ class StayRestMapperTest {
     }
 
     @Test
-    @DisplayName("respuesta: mapea los campos y deja entryTicket a null (sin ticket-service)")
+    @DisplayName("respuesta: mapea los campos y el ticket de entrada emitido por ticket-service")
     void toCheckInResponse_mapsFields() {
         UUID stayId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
         Instant checkIn = Instant.parse("2026-07-23T08:30:00Z");
         StayDTO dto = new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, spotId,
                 UUID.randomUUID(), checkIn, null, null, StayStatus.IN_PROGRESS);
+        EntryTicketDTO entryTicket = new EntryTicketDTO(ticketId, "BC-0001", checkIn);
 
-        CheckInResponse response = mapper.toCheckInResponse(dto, "1234ABC");
+        CheckInResponse response = mapper.toCheckInResponse(new CheckInResultDTO(dto, entryTicket), "1234ABC");
 
         assertEquals(stayId, response.getStayId());
         assertEquals("1234ABC", response.getPlate());
         assertEquals(spotId, response.getSpotId());
         assertEquals(checkIn, response.getCheckIn());
         assertEquals(StayStatus.IN_PROGRESS, response.getStatus());
-        assertNull(response.getEntryTicket());
+        assertEquals(ticketId, response.getEntryTicket().getTicketId());
+        assertEquals("BC-0001", response.getEntryTicket().getBarCode());
     }
 
     @Test
-    @DisplayName("toStayResponse: mapea los campos y deja plate a null (no vive en el dominio)")
+    @DisplayName("toStayResponse: mapea los campos, incluida la matricula ya resuelta en el dto")
     void toStayResponse_mapsFields() {
         UUID stayId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
         Instant checkIn = Instant.parse("2026-07-23T08:30:00Z");
         StayDTO dto = new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, spotId,
-                UUID.randomUUID(), checkIn, null, null, StayStatus.IN_PROGRESS);
+                UUID.randomUUID(), checkIn, null, null, StayStatus.IN_PROGRESS, "1234ABC");
 
         StayResponse response = mapper.toStayResponse(dto);
 
         assertEquals(stayId, response.getStayId());
-        assertNull(response.getPlate());
+        assertEquals("1234ABC", response.getPlate());
         assertEquals(spotId, response.getSpotId());
         assertEquals(checkIn, response.getCheckIn());
         assertEquals(StayStatus.IN_PROGRESS, response.getStatus());
+    }
+
+    @Test
+    @DisplayName("toStayResponse: si el dto no trae matricula resuelta, la respuesta la deja a null")
+    void toStayResponse_withoutPlate_mapsNull() {
+        StayDTO dto = new StayDTO(UUID.randomUUID(), UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(),
+                UUID.randomUUID(), Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
+
+        StayResponse response = mapper.toStayResponse(dto);
+
+        assertNull(response.getPlate());
     }
 
     @Test
