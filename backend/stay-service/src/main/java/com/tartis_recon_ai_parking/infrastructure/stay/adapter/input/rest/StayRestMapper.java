@@ -1,6 +1,8 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.EntryTicketDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
@@ -11,6 +13,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.re
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckOutResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.EntryTicketResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayPageResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
 
@@ -36,17 +39,28 @@ public class StayRestMapper {
 
     /**
      * Construye la respuesta del check-in. {@code plate} viaja en la peticion (el
-     * dominio no la guarda) y {@code entryTicket} queda a null: la emision del ticket
-     * de entrada pertenece a la integracion con ticket-service, fuera de este alcance.
+     * dominio no la guarda); {@code entryTicket} llega ya emitido por ticket-service
+     * a traves del caso de uso.
      */
-    public CheckInResponse toCheckInResponse(StayDTO dto, String plate) {
+    public CheckInResponse toCheckInResponse(CheckInResultDTO result, String plate) {
+        StayDTO dto = result.getStay();
         return new CheckInResponse(
                 dto.getStayId(),
                 plate,
                 dto.getSpotId(),
                 dto.getCheckIn(),
                 dto.getStatus(),
-                null);
+                toEntryTicketResponse(result.getEntryTicket()));
+    }
+
+    private static EntryTicketResponse toEntryTicketResponse(EntryTicketDTO entryTicket) {
+        if (entryTicket == null) {
+            return null;
+        }
+        return new EntryTicketResponse(
+                entryTicket.getTicketId(),
+                entryTicket.getBarCode(),
+                entryTicket.getIssuedAt());
     }
 
     public StayCheckOutDTO toCheckOutDTO(StayCheckOutRequest request) {
@@ -66,8 +80,12 @@ public class StayRestMapper {
                 stay.getStatus());
     }
 
+    /**
+     * {@code plate} viaja resuelta dentro del propio {@code dto} (el caso de uso la
+     * obtiene de vehicle-service; el dominio no la guarda).
+     */
     public StayResponse toStayResponse(StayDTO dto) {
-        return toStayResponse(dto, null);
+        return toStayResponse(dto, dto.getPlate());
     }
 
     public StayResponse toStayResponse(StayDTO dto, String plate) {
@@ -83,10 +101,7 @@ public class StayRestMapper {
                 dto.getTotalAmount());
     }
 
-    /**
-     * Traduce la pagina de aplicacion al contrato REST. {@code plate} viaja a null:
-     * el dominio no la guarda (misma convencion que el detalle por id).
-     */
+    /** Traduce la pagina de aplicacion al contrato REST ({@code plate} ya resuelta por el caso de uso). */
     public StayPageResponse toStayPageResponse(StayPageDTO page) {
         List<StayResponse> content = page.getContent().stream()
                 .map(this::toStayResponse)

@@ -34,8 +34,9 @@ class StayTariffClientAdapterTest {
         // 2. Vincular el MockRestServiceServer al builder para interceptar peticiones HTTP
         server = MockRestServiceServer.bindTo(builder).build();
 
-        // 3. Instanciar el adaptador inyectándole el builder mockeado
-        stayTariffClientAdapter = new StayTariffClientAdapter(builder);
+        // 3. Instanciar el adaptador inyectándole el builder mockeado y la misma URL
+        //    que antes iba hardcodeada, para no tocar las aserciones de requestTo(...)
+        stayTariffClientAdapter = new StayTariffClientAdapter(builder, "http://tariff-service:8080");
     }
 
     @Test

@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -40,7 +41,7 @@ class StaySpotClientAdapterTest {
     void shouldOccupySpotSuccessfully() {
     // GIVEN
     UUID expectedSpotId = UUID.randomUUID();
-    
+
     // CORRECCIÓN: Usar "id" en lugar de "spotId" en el JSON simulado
     String jsonResponse = """
             {
@@ -64,21 +65,15 @@ class StaySpotClientAdapterTest {
 }
 
     @Test
-    void shouldSendStatusKeyWhenUpdatingSpotStatus() {
-        // GIVEN
-        // PATCH /v1/spots/{id}/status espera {"status": ...}. Se comprueba la clave
-        // porque el contrato lo verifica el body, no la URL.
-        UUID spotId = UUID.randomUUID();
+    void shouldThrowWhenNoSpotsAvailable() {
+        // GIVEN: spot-service responde sin id (parking completo / respuesta invalida)
+        server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
-        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/status"))
-                .andExpect(method(HttpMethod.PATCH))
-                .andExpect(jsonPath("$.status").value("UNAVAILABLE"))
-                .andRespond(withSuccess());
-
-        // WHEN
-        staySpotClientAdapter.updateSpotStatus(spotId, "UNAVAILABLE");
-
-        // THEN
+        // WHEN & THEN
+        assertThrows(IllegalStateException.class,
+                () -> staySpotClientAdapter.occupySpot(VehicleType.CAR));
         server.verify();
     }
 
@@ -93,6 +88,25 @@ class StaySpotClientAdapterTest {
 
         // WHEN
         staySpotClientAdapter.releaseSpot(spotId);
+
+        // THEN
+        server.verify();
+    }
+
+    @Test
+    void shouldSendStatusKeyWhenUpdatingSpotStatus() {
+        // GIVEN
+        // PATCH /v1/spots/{id}/status espera {"status": ...}. Se comprueba la clave
+        // porque el contrato lo verifica el body, no la URL.
+        UUID spotId = UUID.randomUUID();
+
+        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/status"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.status").value("UNAVAILABLE"))
+                .andRespond(withSuccess());
+
+        // WHEN
+        staySpotClientAdapter.updateSpotStatus(spotId, "UNAVAILABLE");
 
         // THEN
         server.verify();
