@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -50,6 +51,7 @@ class StaySpotClientAdapterTest {
 
     server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
             .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.vehicleType").value("CAR"))
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
@@ -60,4 +62,39 @@ class StaySpotClientAdapterTest {
     assertEquals(expectedSpotId, spotId);
     server.verify();
 }
+
+    @Test
+    void shouldSendStatusKeyWhenUpdatingSpotStatus() {
+        // GIVEN
+        // PATCH /v1/spots/{id}/status espera {"status": ...}. Se comprueba la clave
+        // porque el contrato lo verifica el body, no la URL.
+        UUID spotId = UUID.randomUUID();
+
+        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/status"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(jsonPath("$.status").value("UNAVAILABLE"))
+                .andRespond(withSuccess());
+
+        // WHEN
+        staySpotClientAdapter.updateSpotStatus(spotId, "UNAVAILABLE");
+
+        // THEN
+        server.verify();
+    }
+
+    @Test
+    void shouldReleaseSpot() {
+        // GIVEN
+        UUID spotId = UUID.randomUUID();
+
+        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/release"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess());
+
+        // WHEN
+        staySpotClientAdapter.releaseSpot(spotId);
+
+        // THEN
+        server.verify();
+    }
 }

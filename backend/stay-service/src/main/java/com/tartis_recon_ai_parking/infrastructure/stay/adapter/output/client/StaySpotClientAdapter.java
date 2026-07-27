@@ -27,7 +27,7 @@ public class StaySpotClientAdapter implements StaySpotPort {
 public UUID occupySpot(VehicleType vehicleType) {
     SpotResponse response = restClient.post()
             .uri("/v1/spots/occupy")
-            .body(Map.of("type", vehicleType.name()))
+            .body(Map.of("vehicleType", vehicleType.name()))
             .retrieve()
             .body(SpotResponse.class); // <-- Uso del DTO limpia los warnings
 
@@ -47,10 +47,10 @@ public UUID occupySpot(VehicleType vehicleType) {
     }
 
     @Override
-    public void updateSpotStatus(UUID spotId, String vehicleType) {
+    public void updateSpotStatus(UUID spotId, String status) {
     restClient.patch()
             .uri("/v1/spots/{id}/status", spotId)
-            .body(Map.of("type", vehicleType)) // Ajusta las claves según SpotRequest
+            .body(Map.of("status", status))
             .retrieve()
             .toBodilessEntity();
 }
