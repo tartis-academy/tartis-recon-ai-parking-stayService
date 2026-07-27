@@ -16,5 +16,9 @@ public interface StaySpotPort {
      */
     void releaseSpot(UUID spotId);
 
-    void updateSpotStatus(UUID spotId, String vehicleType);
+    /**
+     * Cambia el estado de la plaza (AVAILABLE / UNAVAILABLE) via
+     * PATCH /v1/spots/{id}/status.
+     */
+    void updateSpotStatus(UUID spotId, String status);
 }
