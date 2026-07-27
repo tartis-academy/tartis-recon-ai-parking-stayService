@@ -180,4 +180,67 @@ void shouldReturnEmptyWhenVehicleIdNotFound() {
     assertTrue(vehicleInfo.isEmpty());
     server.verify();
 }
+
+@Test
+void shouldThrowWhenResponseHasNoUniqueId() {
+    // GIVEN: respuesta 200 pero sin uniqueId (respuesta invalida de vehicle-service)
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+    // WHEN & THEN
+    assertThrows(IllegalStateException.class,
+            () -> stayVehicleClientAdapter.findByPlate("1234ABC"));
+    server.verify();
+}
+
+@Test
+void shouldFallbackToRequestedTypeWhenResponseTypeMissing() {
+    // GIVEN: vehicle-service no informa el tipo; debe usarse el que se pidio
+    UUID vehicleId = UUID.randomUUID();
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "active": true
+            }
+            """.formatted(vehicleId);
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    StayVehiclePort.VehicleInfo vehicleInfo =
+            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.MOTORBIKE);
+
+    // THEN
+    assertEquals(VehicleType.MOTORBIKE, vehicleInfo.vehicleType());
+    server.verify();
+}
+
+@Test
+void shouldFallbackToRequestedPlateWhenResponsePlateMissing() {
+    // GIVEN: vehicle-service no informa la matricula; debe usarse la que se pidio
+    UUID vehicleId = UUID.randomUUID();
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(vehicleId);
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    StayVehiclePort.VehicleInfo vehicleInfo =
+            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+
+    // THEN
+    assertEquals("1234ABC", vehicleInfo.plate());
+    server.verify();
+}
 }

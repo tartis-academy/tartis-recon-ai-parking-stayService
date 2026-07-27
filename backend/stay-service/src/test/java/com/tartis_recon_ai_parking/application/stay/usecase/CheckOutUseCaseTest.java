@@ -155,4 +155,32 @@ class CheckOutUseCaseTest {
 
         verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, spotPort, ticketPort);
     }
+
+    @Test
+    @DisplayName("Debe lanzar InvalidStayException si la matricula viene a null, sin tocar los puertos")
+    void shouldFailWhenPlateNull() {
+        assertThrows(InvalidStayException.class,
+                () -> useCase.execute(new StayCheckOutDTO(null, null)));
+
+        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, spotPort, ticketPort);
+    }
+
+    @Test
+    @DisplayName("IN-25: si liberar la plaza falla tras el check-out, se registra pero no se propaga (requiere liberacion manual)")
+    void shouldSwallowSpotReleaseFailureAfterCheckOut() {
+        when(vehiclePort.findByPlate(PLATE))
+                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
+        when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(inProgressStay()));
+        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(ticketPort.issueExitTicket(eq(stayId), any())).thenReturn(UUID.randomUUID());
+        org.mockito.Mockito.doThrow(new IllegalStateException("spot-service no disponible"))
+                .when(spotPort).releaseSpot(spotId);
+
+        CheckOutResultDTO result = useCase.execute(new StayCheckOutDTO(PLATE, null));
+
+        assertEquals(StayStatus.FINISHED, result.getStay().getStatus());
+        verify(spotPort).releaseSpot(spotId);
+    }
 }

@@ -93,6 +93,19 @@ class StayRestMapperTest {
     }
 
     @Test
+    @DisplayName("respuesta: si el check-in no trae ticket de entrada (ticket-service no disponible), entryTicket queda a null")
+    void toCheckInResponse_nullEntryTicket_mapsNull() {
+        UUID stayId = UUID.randomUUID();
+        Instant checkIn = Instant.parse("2026-07-23T08:30:00Z");
+        StayDTO dto = new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(),
+                UUID.randomUUID(), checkIn, null, null, StayStatus.IN_PROGRESS);
+
+        CheckInResponse response = mapper.toCheckInResponse(new CheckInResultDTO(dto, null), "1234ABC");
+
+        assertNull(response.getEntryTicket());
+    }
+
+    @Test
     @DisplayName("toStayResponse: mapea los campos, incluida la matricula ya resuelta en el dto")
     void toStayResponse_mapsFields() {
         UUID stayId = UUID.randomUUID();

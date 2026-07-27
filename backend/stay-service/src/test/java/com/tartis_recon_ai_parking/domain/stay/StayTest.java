@@ -329,4 +329,48 @@ class StayTest {
         // Deben considerarse distintas: la igualdad depende exclusivamente del id.
         assertThat(a).isNotEqualTo(b);
     }
+
+    @Test
+    @DisplayName("Una estancia es igual a si misma (reflexividad)")
+    void shouldBeEqualToItself() {
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+
+        assertThat(stay).isEqualTo(stay);
+    }
+
+    @Test
+    @DisplayName("Una estancia nunca es igual a un objeto de otro tipo")
+    void shouldNotBeEqualToDifferentType() {
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+
+        assertThat(stay).isNotEqualTo("no soy una estancia");
+        assertThat(stay).isNotEqualTo(null);
+    }
+
+    @Test
+    @DisplayName("toString debe incluir los identificadores y el estado, para depuracion")
+    void toStringShouldContainKeyFields() {
+        Stay stay = Stay.checkIn(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID, CHECK_IN);
+
+        assertThat(stay.toString())
+                .contains(ID.toString())
+                .contains(VEHICLE_ID.toString())
+                .contains("CAR")
+                .contains(SPOT_ID.toString())
+                .contains("IN_PROGRESS");
+    }
+
+    @Test
+    @DisplayName("IN-16: solo una estancia FINISHED puede tener importe; restore debe rechazar el resto")
+    void shouldRejectAmountOnNonFinishedStayOnRestore() {
+        // QUE HACE:
+        // Intenta reconstruir una estancia IN_PROGRESS (sin checkOut, para no chocar con IN-14)
+        // pero con un importe ya calculado.
+        // QUE DEBERIA HACER:
+        // Debe fallar: el importe solo tiene sentido cuando la estancia esta finalizada (IN-16).
+        assertThatThrownBy(() -> Stay.restore(ID, VEHICLE_ID, VehicleType.CAR, SPOT_ID, TARIFF_ID,
+                CHECK_IN, null, new BigDecimal("5.00"), StayStatus.IN_PROGRESS))
+                .isInstanceOf(InvalidStayException.class)
+                .hasMessageContaining("IN-16");
+    }
 }
