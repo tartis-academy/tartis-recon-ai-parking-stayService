@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class StayVehicleClientAdapter implements StayVehiclePort {
@@ -59,6 +60,26 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
                     .body(VehicleResponse.class);
 
             return Optional.of(toVehicleInfo(response, plate, null));
+        } catch (HttpClientErrorException.NotFound e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * {@code GET /v1/vehicles/{id}} (VehicleRestAdapter.getVehicleById en
+     * vehicle-service), confirmado contra su codigo: usa el mismo
+     * {@code mapper.toResponse(vehicle)} que {@code /v1/vehicles/plate/{plate}},
+     * asi que devuelve la misma forma de {@link VehicleResponse}.
+     */
+    @Override
+    public Optional<VehicleInfo> findById(UUID vehicleId) {
+        try {
+            VehicleResponse response = restClient.get()
+                    .uri("/v1/vehicles/{id}", vehicleId)
+                    .retrieve()
+                    .body(VehicleResponse.class);
+
+            return Optional.of(toVehicleInfo(response, null, null));
         } catch (HttpClientErrorException.NotFound e) {
             return Optional.empty();
         }

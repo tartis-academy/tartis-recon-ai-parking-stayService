@@ -14,8 +14,10 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withNoContent;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class StaySpotClientAdapterTest {
@@ -60,4 +62,47 @@ class StaySpotClientAdapterTest {
     assertEquals(expectedSpotId, spotId);
     server.verify();
 }
+
+    @Test
+    void shouldThrowWhenNoSpotsAvailable() {
+        // GIVEN: spot-service responde sin id (parking completo / respuesta invalida)
+        server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        // WHEN & THEN
+        assertThrows(IllegalStateException.class,
+                () -> staySpotClientAdapter.occupySpot(VehicleType.CAR));
+        server.verify();
+    }
+
+    @Test
+    void shouldReleaseSpot() {
+        // GIVEN
+        UUID spotId = UUID.randomUUID();
+        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/release"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withNoContent());
+
+        // WHEN
+        staySpotClientAdapter.releaseSpot(spotId);
+
+        // THEN
+        server.verify();
+    }
+
+    @Test
+    void shouldUpdateSpotStatus() {
+        // GIVEN
+        UUID spotId = UUID.randomUUID();
+        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/status"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(withNoContent());
+
+        // WHEN
+        staySpotClientAdapter.updateSpotStatus(spotId, "OCCUPIED");
+
+        // THEN
+        server.verify();
+    }
 }

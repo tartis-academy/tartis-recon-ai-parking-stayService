@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
@@ -67,9 +68,9 @@ public class StayRestAdapter {
      */
     @PostMapping("/check-in")
     public ResponseEntity<CheckInResponse> checkIn(@Valid @RequestBody StayRequest request) {
-        StayDTO stay = checkInUseCase.execute(mapper.toCreateDTO(request));
+        CheckInResultDTO result = checkInUseCase.execute(mapper.toCreateDTO(request));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(mapper.toCheckInResponse(stay, request.plate));
+                .body(mapper.toCheckInResponse(result, request.plate));
     }
 
     @PostMapping("/check-out")

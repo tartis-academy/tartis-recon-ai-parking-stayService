@@ -1,6 +1,8 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.EntryTicketDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
@@ -67,13 +69,17 @@ class StayRestAdapterWebTest {
     }
 
     @Test
-    @DisplayName("acceso autorizado -> 201 con la estancia creada (CA3)")
+    @DisplayName("acceso autorizado -> 201 con la estancia creada y el ticket de entrada (CA3)")
     void checkIn_returns201() throws Exception {
         UUID stayId = UUID.randomUUID();
         UUID spotId = UUID.randomUUID();
-        when(checkInUseCase.execute(any())).thenReturn(new StayDTO(
+        UUID ticketId = UUID.randomUUID();
+        StayDTO dto = new StayDTO(
                 stayId, UUID.randomUUID(), VehicleType.CAR, spotId, UUID.randomUUID(),
-                Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS));
+                Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
+        EntryTicketDTO entryTicket = new EntryTicketDTO(
+                ticketId, "BC-0001", Instant.parse("2026-07-23T08:30:00Z"));
+        when(checkInUseCase.execute(any())).thenReturn(new CheckInResultDTO(dto, entryTicket));
 
         mockMvc.perform(post("/v1/stays/check-in")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -82,7 +88,9 @@ class StayRestAdapterWebTest {
                 .andExpect(jsonPath("$.stayId").value(stayId.toString()))
                 .andExpect(jsonPath("$.plate").value("1234ABC"))
                 .andExpect(jsonPath("$.spotId").value(spotId.toString()))
-                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.entryTicket.ticketId").value(ticketId.toString()))
+                .andExpect(jsonPath("$.entryTicket.barCode").value("BC-0001"));
     }
 
     @Test

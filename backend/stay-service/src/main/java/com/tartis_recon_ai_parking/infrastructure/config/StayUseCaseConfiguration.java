@@ -35,9 +35,10 @@ public class StayUseCaseConfiguration {
                                   StayVehiclePort vehiclePort,
                                   StaySpotPort spotPort,
                                   StayTariffPort tariffPort,
+                                  StayTicketPort ticketPort,
                                   StayDTOFactory stayDTOFactory,
                                   Clock clock) {
-        return new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, stayDTOFactory, clock);
+        return new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort, stayDTOFactory, clock);
     }
 
     @Bean
@@ -68,12 +69,14 @@ public class StayUseCaseConfiguration {
     }
 
     @Bean
-    GetStayUseCase getStayUseCase(StayPersistence stayPersistence, StayDTOFactory stayDTOFactory) {
-        return new GetStayUseCase(stayPersistence, stayDTOFactory);
+    GetStayUseCase getStayUseCase(StayPersistence stayPersistence, StayVehiclePort vehiclePort,
+                                  StayDTOFactory stayDTOFactory) {
+        return new GetStayUseCase(stayPersistence, vehiclePort, stayDTOFactory);
     }
 
     @Bean
-    ListStaysUseCase listStaysUseCase(StayPersistence stayPersistence, StayDTOFactory stayDTOFactory) {
-        return new ListStaysUseCase(stayPersistence, stayDTOFactory);
+    ListStaysUseCase listStaysUseCase(StayPersistence stayPersistence, StayVehiclePort vehiclePort,
+                                      StayDTOFactory stayDTOFactory) {
+        return new ListStaysUseCase(stayPersistence, vehiclePort, stayDTOFactory);
     }
 }

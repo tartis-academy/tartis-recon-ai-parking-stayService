@@ -61,4 +61,9 @@ class StayPersistenceMapperTest {
     void toDomain_ShouldReturnNull_WhenEntityIsNull() {
         assertNull(mapper.toDomain(null));
     }
+
+    @Test
+    void toEntity_ShouldReturnNull_WhenStayIsNull() {
+        assertNull(mapper.toEntity(null));
+    }
 }
