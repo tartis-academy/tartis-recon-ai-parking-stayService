@@ -1,5 +1,8 @@
 package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output;
 
+import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
+import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -65,5 +68,64 @@ class CustomizedExceptionAdapterTest {
         ResponseEntity<ErrorResponse> response = adapter.handleValidation(ex, request);
 
         assertEquals("plate: no debe estar vacio; vehicleType: no reconocido", response.getBody().message());
+    }
+
+    @Test
+    @DisplayName("handleSpotServiceUnavailable: traduce el fallo de spot-service a 503 con mensaje interpretable")
+    void handleSpotServiceUnavailable_buildsServiceUnavailable() {
+        SpotServiceException ex = new SpotServiceException(
+                "No se pudo contactar con spot-service para ocupar una plaza de tipo CAR",
+                new IllegalStateException("Connection refused"));
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleSpotServiceUnavailable(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("No se pudo contactar con spot-service para ocupar una plaza de tipo CAR",
+                response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleNoActiveTariff: sin tarifa activa (IN-08) devuelve 409")
+    void handleNoActiveTariff_buildsConflict() {
+        NoActiveTariffException ex = new NoActiveTariffException("No hay tarifa activa configurada para CAR");
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleNoActiveTariff(ex, request);
+
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertEquals("No hay tarifa activa configurada para CAR", response.getBody().message());
+    }
+
+    @Test
+    @DisplayName("handleTariffServiceUnavailable: traduce el fallo de tariff-service a 503 con mensaje interpretable")
+    void handleTariffServiceUnavailable_buildsServiceUnavailable() {
+        TariffServiceException ex = new TariffServiceException(
+                "No se pudo contactar con tariff-service para calcular el importe de CAR",
+                new IllegalStateException("Connection refused"));
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleTariffServiceUnavailable(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("No se pudo contactar con tariff-service para calcular el importe de CAR",
+                response.getBody().message());
+        assertEquals("/v1/stays/check-out", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleUnexpected: red de seguridad, cualquier excepcion no anticipada da 500 con mensaje generico y seguro")
+    void handleUnexpected_buildsInternalServerErrorWithSafeMessage() {
+        NullPointerException ex = new NullPointerException("detalle interno que no debe llegar al cliente");
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleUnexpected(ex, request);
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        // El mensaje de la excepcion real (que podria filtrar detalles internos)
+        // nunca debe llegar al cliente: solo el generico.
+        assertEquals("Ha ocurrido un error inesperado", response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 }
