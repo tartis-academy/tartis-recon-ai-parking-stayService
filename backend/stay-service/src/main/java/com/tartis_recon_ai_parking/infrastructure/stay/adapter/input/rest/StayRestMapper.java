@@ -1,5 +1,113 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest;
 
+import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
+import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckOutResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayPageResponse;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
+
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * Traduce entre los DTOs HTTP del check-in y los DTOs de la capa de aplicacion,
+ * para que un cambio en el contrato REST no obligue a tocar el caso de uso (IN-31).
+ */
+@Component
 public class StayRestMapper {
 
+    /**
+     * {@link StayRequest} lleva el tipo como {@code String} (campo opcional del
+     * contrato); el dominio trabaja con el enum {@link VehicleType}. Un tipo
+     * presente pero no reconocido es una peticion invalida (400), no un fallo interno.
+     */
+    public StayCreateDTO toCreateDTO(StayRequest request) {
+        return new StayCreateDTO(request.plate, parseVehicleType(request.vehicleType));
+    }
+
+    /**
+     * Construye la respuesta del check-in. {@code plate} viaja en la peticion (el
+     * dominio no la guarda) y {@code entryTicket} queda a null: la emision del ticket
+     * de entrada pertenece a la integracion con ticket-service, fuera de este alcance.
+     */
+    public CheckInResponse toCheckInResponse(StayDTO dto, String plate) {
+        return new CheckInResponse(
+                dto.getStayId(),
+                plate,
+                dto.getSpotId(),
+                dto.getCheckIn(),
+                dto.getStatus(),
+                null);
+    }
+
+    public StayCheckOutDTO toCheckOutDTO(StayCheckOutRequest request) {
+        return new StayCheckOutDTO(request.plate, request.entryTicketId);
+    }
+
+    public CheckOutResponse toCheckOutResponse(CheckOutResultDTO result, String plate) {
+        StayDTO stay = result.getStay();
+        return new CheckOutResponse(
+                stay.getStayId(),
+                plate,
+                stay.getCheckIn(),
+                stay.getCheckOut(),
+                result.getTotalMinutes(),
+                stay.getTotalAmount(),
+                result.getExitTicketId(),
+                stay.getStatus());
+    }
+
+    public StayResponse toStayResponse(StayDTO dto) {
+        return toStayResponse(dto, null);
+    }
+
+    public StayResponse toStayResponse(StayDTO dto, String plate) {
+        return new StayResponse(
+                dto.getStayId(),
+                plate,
+                dto.getVehicleId(),
+                dto.getSpotId(),
+                dto.getTariffId(),
+                dto.getStatus(),
+                dto.getCheckIn(),
+                dto.getCheckOut(),
+                dto.getTotalAmount());
+    }
+
+    /**
+     * Traduce la pagina de aplicacion al contrato REST. {@code plate} viaja a null:
+     * el dominio no la guarda (misma convencion que el detalle por id).
+     */
+    public StayPageResponse toStayPageResponse(StayPageDTO page) {
+        List<StayResponse> content = page.getContent().stream()
+                .map(this::toStayResponse)
+                .toList();
+        return new StayPageResponse(
+                content,
+                page.getPage(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
+    }
+
+    private static VehicleType parseVehicleType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            // Ausente: se resuelve el tipo desde vehicle-service si el vehiculo existe.
+            return null;
+        }
+        try {
+            return VehicleType.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidStayException("Tipo de vehiculo no reconocido: " + raw);
+        }
+    }
 }

@@ -2,8 +2,9 @@ name: CI
 
 on:
   pull_request:
+    branches: [main, release]
   push:
-    branches: [main, release, release123]
+    branches: [main, release]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -37,14 +38,11 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # TODO: quitar -DskipTests (y anadir Postgres como service container)
-      # cuando el dominio de stay-service este implementado. Hoy StayEntity
-      # es una clase vacia sin @Entity/@Id.
-      # jacoco-maven-plugin (pom.xml) igual genera target/site/jacoco/jacoco.xml
-      # en esta fase, aunque no haya tests corriendo: sin ejecuciones el reporte
-      # sale vacio (0% cobertura), pero no rompe el build.
+      # Los tests corren en H2 en memoria (perfil "test"), sin Postgres externo,
+      # asi que se ejecutan en el propio job. jacoco-maven-plugin (pom.xml) genera
+      # target/site/jacoco/jacoco.xml con la cobertura para que la lea SonarCloud.
       - name: Build
-        run: ./mvnw -B verify -DskipTests
+        run: ./mvnw -B verify
 
       - name: Cache paquetes de SonarCloud
         uses: actions/cache@v4

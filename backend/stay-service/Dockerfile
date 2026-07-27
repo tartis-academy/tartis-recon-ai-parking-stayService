@@ -35,6 +35,10 @@ COPY --from=build --chown=app:app /build/extracted/snapshot-dependencies/ ./
 COPY --from=build --chown=app:app /build/extracted/application/ ./
 
 EXPOSE 8080
-# Boot 3.2+: el launcher cambio de paquete a ...loader.launch.
+# Boot 4.x: 'extract --layers' ya no genera el JarLauncher de capas anidadas
+# (paquete org.springframework.boot.loader.*); el jar extraido es un jar fino
+# normal con Class-Path a ./lib/*.jar, se arranca con 'java -jar' tal cual.
+# El wildcard cubre el nombre real (<artifactId>-<version>.jar); 'exec' deja
+# a java como PID 1 para que reciba SIGTERM directo al parar el contenedor.
 # MaxRAMPercentage: el default de la JVM en contenedores pequenos es conservador.
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "org.springframework.boot.loader.launch.JarLauncher"]
+ENTRYPOINT ["sh", "-c", "exec java -XX:MaxRAMPercentage=75 -jar *.jar"]
