@@ -222,12 +222,13 @@ class CheckInUseCaseTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("si la estancia no se persiste, libera la plaza ya ocupada")
+    @DisplayName("si la estancia no se persiste (con el ticket ya emitido), libera la plaza ya ocupada")
     void shouldReleaseSpot_whenStayCannotBePersisted() {
         givenVehicle(VehicleType.CAR, true);
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
         when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
+        givenTicketIssued();
         when(stayPersistence.save(any(Stay.class)))
                 .thenThrow(new IllegalStateException("base de datos caida"));
 
@@ -236,17 +237,19 @@ class CheckInUseCaseTest {
 
         // Sin esto la plaza quedaria OCCUPIED sin estancia asociada (IN-25).
         verify(spotPort).releaseSpot(spotId);
-        verifyNoInteractions(ticketPort);
+        // El ticket se emite antes de persistir, asi que en este escenario si se
+        // llega a invocar (puede quedar un ticket huerfano en ticket-service, pero
+        // eso no bloquea reintentos del vehiculo como si haria una estancia huerfana).
+        verify(ticketPort).issueEntryTicket(any(), any(), any());
     }
 
     @Test
-    @DisplayName("si falla la emision del ticket de entrada, libera la plaza igualmente (IN-25)")
+    @DisplayName("si falla la emision del ticket de entrada, libera la plaza y NO persiste la estancia (evita huerfanos, IN-25)")
     void shouldReleaseSpot_whenEntryTicketCannotBeIssued() {
         givenVehicle(VehicleType.CAR, true);
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
         when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
-        when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
         when(ticketPort.issueEntryTicket(any(), any(), any()))
                 .thenThrow(new IllegalStateException("ticket-service caido"));
 
@@ -254,6 +257,10 @@ class CheckInUseCaseTest {
                 () -> useCase.execute(new StayCreateDTO(PLATE, null)));
 
         verify(spotPort).releaseSpot(spotId);
+        // Bloqueante corregido: si ticket-service falla, la estancia nunca debe
+        // llegar a guardarse, o el vehiculo quedaria bloqueado por
+        // DuplicateActiveStayException en el siguiente intento de check-in.
+        verify(stayPersistence, never()).save(any());
     }
 
     @Test

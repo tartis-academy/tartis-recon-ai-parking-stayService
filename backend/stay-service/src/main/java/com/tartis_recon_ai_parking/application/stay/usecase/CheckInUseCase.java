@@ -114,13 +114,17 @@ public class CheckInUseCase {
                     tariffId,
                     clock.instant());
 
-            Stay saved = stayPersistence.save(stay);
-
-            // 6. Ticket de entrada (HU-01 CA3): sin el, el conductor no puede
-            //    justificar la hora de entrada al salir. Un fallo aqui tambien
-            //    compensa liberando la plaza, igual que un fallo al persistir.
+            // 6. Ticket de entrada (HU-01 CA3) ANTES de persistir la estancia.
+            //    El id de la estancia ya existe en memoria (lo genera este caso de
+            //    uso, no la BD), asi que no hace falta esperar al save() para
+            //    emitir el ticket. De este modo, si ticket-service falla o esta
+            //    caido, la estancia nunca llega a guardarse: el catch solo tiene
+            //    que liberar la plaza y no queda una estancia huerfana en BD que
+            //    bloquee reintentos futuros del mismo vehiculo (IN-02, CB-05).
             StayTicketPort.EntryTicketInfo ticket =
-                    ticketPort.issueEntryTicket(saved.getId(), plate, saved.getCheckIn());
+                    ticketPort.issueEntryTicket(stay.getId(), plate, stay.getCheckIn());
+
+            Stay saved = stayPersistence.save(stay);
 
             EntryTicketDTO entryTicket = new EntryTicketDTO(
                     ticket.ticketId(), ticket.barCode(), ticket.issuedAt());
