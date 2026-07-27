@@ -18,7 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withNoContent;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class StaySpotClientAdapterTest {
@@ -42,7 +41,7 @@ class StaySpotClientAdapterTest {
     void shouldOccupySpotSuccessfully() {
     // GIVEN
     UUID expectedSpotId = UUID.randomUUID();
-    
+
     // CORRECCIÓN: Usar "id" en lugar de "spotId" en el JSON simulado
     String jsonResponse = """
             {
@@ -82,12 +81,19 @@ class StaySpotClientAdapterTest {
     void shouldReleaseSpot() {
         // GIVEN
         UUID spotId = UUID.randomUUID();
+
         server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/release"))
                 .andExpect(method(HttpMethod.POST))
-                .andRespond(withNoContent());
+                .andRespond(withSuccess());
 
         // WHEN
         staySpotClientAdapter.releaseSpot(spotId);
+
+        // THEN
+        server.verify();
+    }
+
+    @Test
     void shouldSendStatusKeyWhenUpdatingSpotStatus() {
         // GIVEN
         // PATCH /v1/spots/{id}/status espera {"status": ...}. Se comprueba la clave
@@ -101,31 +107,6 @@ class StaySpotClientAdapterTest {
 
         // WHEN
         staySpotClientAdapter.updateSpotStatus(spotId, "UNAVAILABLE");
-
-        // THEN
-        server.verify();
-    }
-
-    @Test
-    void shouldUpdateSpotStatus() {
-        // GIVEN
-        UUID spotId = UUID.randomUUID();
-        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/status"))
-                .andExpect(method(HttpMethod.PATCH))
-                .andRespond(withNoContent());
-
-        // WHEN
-        staySpotClientAdapter.updateSpotStatus(spotId, "OCCUPIED");
-    void shouldReleaseSpot() {
-        // GIVEN
-        UUID spotId = UUID.randomUUID();
-
-        server.expect(requestTo("http://spot-service:8080/v1/spots/" + spotId + "/release"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess());
-
-        // WHEN
-        staySpotClientAdapter.releaseSpot(spotId);
 
         // THEN
         server.verify();
