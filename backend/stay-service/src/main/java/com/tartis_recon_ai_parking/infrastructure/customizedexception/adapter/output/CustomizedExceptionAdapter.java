@@ -7,6 +7,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotExceptio
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleDeactivatedException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
@@ -85,6 +86,7 @@ public class CustomizedExceptionAdapter {
      * (IN-36): el frontend puede mostrar "servicio de plazas no disponible" en
      * vez de un error generico sin mensaje interpretable.
      */
+
     @ExceptionHandler(SpotServiceException.class)
     public ResponseEntity<ErrorResponse> handleSpotServiceUnavailable(SpotServiceException ex,
                                                                       HttpServletRequest request) {
@@ -103,8 +105,21 @@ public class CustomizedExceptionAdapter {
      * contrato (respuesta 200 sin importe). Igual que {@link SpotServiceException},
      * nunca debe llegar sin traducir al frontend (IN-36).
      */
+    
     @ExceptionHandler(TariffServiceException.class)
     public ResponseEntity<ErrorResponse> handleTariffServiceUnavailable(TariffServiceException ex,
+                                                                        HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /**
+     * ticket-service caido, con timeout, con error 5xx, o incumpliendo su propio
+     * contrato (sin ticket de entrada, o sin uniqueId al emitir uno de salida).
+     * Igual que {@link SpotServiceException} y {@link TariffServiceException},
+     * nunca debe llegar sin traducir al frontend (IN-36).
+     */
+    @ExceptionHandler(TicketServiceException.class)
+    public ResponseEntity<ErrorResponse> handleTicketServiceUnavailable(TicketServiceException ex,
                                                                         HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }

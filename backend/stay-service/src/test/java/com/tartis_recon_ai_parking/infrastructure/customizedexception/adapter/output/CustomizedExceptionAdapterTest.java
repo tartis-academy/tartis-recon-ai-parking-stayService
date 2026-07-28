@@ -3,6 +3,7 @@ package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.o
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -112,6 +113,22 @@ class CustomizedExceptionAdapterTest {
         assertEquals("No se pudo contactar con tariff-service para calcular el importe de CAR",
                 response.getBody().message());
         assertEquals("/v1/stays/check-out", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleTicketServiceUnavailable: traduce el fallo de ticket-service a 503 con mensaje interpretable")
+    void handleTicketServiceUnavailable_buildsServiceUnavailable() {
+        TicketServiceException ex = new TicketServiceException(
+                "No se pudo contactar con ticket-service para emitir el ticket de entrada de la estancia X",
+                new IllegalStateException("Connection refused"));
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleTicketServiceUnavailable(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("No se pudo contactar con ticket-service para emitir el ticket de entrada de la estancia X",
+                response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 
     @Test
