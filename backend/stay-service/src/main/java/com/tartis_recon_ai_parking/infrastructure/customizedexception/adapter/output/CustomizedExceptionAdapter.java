@@ -9,6 +9,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleDeactivatedException;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -121,6 +122,19 @@ public class CustomizedExceptionAdapter {
     @ExceptionHandler(TicketServiceException.class)
     public ResponseEntity<ErrorResponse> handleTicketServiceUnavailable(TicketServiceException ex,
                                                                         HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /**
+     * vehicle-service caido, con timeout, con error 5xx, o incumpliendo su
+     * propio contrato (respuesta sin uniqueId). El 404 de "matricula no
+     * registrada todavia" NO pasa por aqui: es negocio y ya se resuelve dentro
+     * del propio adaptador. Igual que los demas servicios externos, nunca debe
+     * llegar sin traducir al frontend (IN-36).
+     */
+    @ExceptionHandler(VehicleServiceException.class)
+    public ResponseEntity<ErrorResponse> handleVehicleServiceUnavailable(VehicleServiceException ex,
+                                                                         HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 

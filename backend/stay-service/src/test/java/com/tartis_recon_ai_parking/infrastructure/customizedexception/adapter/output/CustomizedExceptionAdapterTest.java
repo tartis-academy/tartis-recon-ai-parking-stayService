@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -127,6 +128,22 @@ class CustomizedExceptionAdapterTest {
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         assertEquals("No se pudo contactar con ticket-service para emitir el ticket de entrada de la estancia X",
+                response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleVehicleServiceUnavailable: traduce el fallo de vehicle-service a 503 con mensaje interpretable")
+    void handleVehicleServiceUnavailable_buildsServiceUnavailable() {
+        VehicleServiceException ex = new VehicleServiceException(
+                "No se pudo contactar con vehicle-service para consultar el vehiculo 1234ABC",
+                new IllegalStateException("Connection refused"));
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleVehicleServiceUnavailable(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("No se pudo contactar con vehicle-service para consultar el vehiculo 1234ABC",
                 response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
