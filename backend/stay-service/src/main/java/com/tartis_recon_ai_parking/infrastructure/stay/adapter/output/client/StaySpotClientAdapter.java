@@ -8,6 +8,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.S
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -35,6 +36,13 @@ public UUID occupySpot(VehicleType vehicleType) {
                 .body(Map.of("vehicleType", vehicleType.name()))
                 .retrieve()
                 .body(SpotResponse.class); // <-- Uso del DTO limpia los warnings
+    } catch (HttpClientErrorException.Conflict e) {
+        // RN-01: confirmado contra el openapi.yml y el codigo de spot-service
+        // (OccupySpotUseCase / CustomizedExceptionAdapter): "sin plazas" del
+        // tipo solicitado se modela siempre como 409, nunca como 200 con id
+        // null. Es una respuesta valida de negocio, no un fallo de infraestructura.
+        throw new NoAvailableSpotException(
+                "No hay plazas disponibles para el tipo de vehiculo " + vehicleType, e);
     } catch (RestClientException e) {
         // spot-service caido, timeout, 5xx... no es RN-01 (no confundir con "sin
         // plazas"): se traduce para que el frontend reciba un ErrorResponse
@@ -44,9 +52,11 @@ public UUID occupySpot(VehicleType vehicleType) {
     }
 
     if (response == null || response.id() == null) {
-        // RN-01: respuesta valida de negocio, no un fallo de infraestructura.
-        throw new NoAvailableSpotException(
-                "No hay plazas disponibles para el tipo de vehiculo " + vehicleType);
+        // Un 200 sin id incumple el contrato de spot-service (RN-01 siempre
+        // responde 409, nunca 200 vacio): es un fallo del servicio externo, no
+        // un "sin plazas" legitimo.
+        throw new SpotServiceException(
+                "Respuesta invalida de spot-service al ocupar una plaza de tipo " + vehicleType);
     }
 
     return response.id();
