@@ -13,4 +13,8 @@ public class NoAvailableSpotException extends RuntimeException {
     public NoAvailableSpotException(String message) {
         super(message);
     }
+
+    public NoAvailableSpotException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
