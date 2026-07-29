@@ -17,4 +17,8 @@ public class SpotServiceException extends RuntimeException {
     public SpotServiceException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    public SpotServiceException(String message) {
+        super(message);
+    }
 }

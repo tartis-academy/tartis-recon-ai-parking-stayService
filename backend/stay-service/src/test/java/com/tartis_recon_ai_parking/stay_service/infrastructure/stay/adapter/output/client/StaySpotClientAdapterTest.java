@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -69,13 +70,29 @@ class StaySpotClientAdapterTest {
 }
 
     @Test
-    void shouldThrowNoAvailableSpot_whenResponseHasNoId() {
-        // GIVEN: spot-service responde 200 pero sin id (RN-01: sin plazas de ese tipo)
+    void shouldThrowSpotServiceException_whenResponseHasNoId() {
+        // GIVEN: spot-service responde 200 pero sin id. Segun su contrato real
+        // (openapi.yml + OccupySpotUseCase), RN-01 siempre es 409, nunca un 200
+        // vacio: esto es un incumplimiento de contrato, no "sin plazas".
         server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
         // WHEN & THEN
+        assertThrows(SpotServiceException.class,
+                () -> staySpotClientAdapter.occupySpot(VehicleType.CAR));
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowNoAvailableSpot_whenSpotServiceReturns409() {
+        // GIVEN: contrato confirmado (openapi.yml de spot-service): RN-01
+        // "sin plazas" se modela siempre como 409, nunca como 200 con id null.
+        server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withRawStatus(409));
+
+        // WHEN & THEN: debe ser RN-01 (sin plazas), no SpotServiceException (503)
         assertThrows(NoAvailableSpotException.class,
                 () -> staySpotClientAdapter.occupySpot(VehicleType.CAR));
         server.verify();
