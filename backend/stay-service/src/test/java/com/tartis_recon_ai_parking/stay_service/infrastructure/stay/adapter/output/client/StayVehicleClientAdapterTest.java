@@ -2,6 +2,7 @@ package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.out
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client.StayVehicleClientAdapter;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -14,10 +15,12 @@ import org.springframework.web.client.RestClient;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class StayVehicleClientAdapterTest {
@@ -61,7 +64,38 @@ void shouldGetOrCreateVehicle() {
     assertEquals("1234ABC", vehicleInfo.plate());
     assertEquals(VehicleType.CAR, vehicleInfo.vehicleType());
     assertTrue(vehicleInfo.active());
-    
+
+    server.verify();
+}
+
+@Test
+void shouldThrowVehicleServiceException_whenGetOrCreateVehicleGetFails() {
+    // GIVEN: vehicle-service caido / devuelve 500 en la consulta (no 404, eso es negocio)
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withServerError());
+
+    // WHEN & THEN: no debe colarse la RestClientException cruda
+    VehicleServiceException ex = assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+    assertThat(ex.getCause()).isNotNull();
+    server.verify();
+}
+
+@Test
+void shouldThrowVehicleServiceException_whenGetOrCreateVehiclePostFails() {
+    // GIVEN: matricula no existe (404, negocio) pero el alta posterior falla
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withServerError());
+
+    // WHEN & THEN
+    VehicleServiceException ex = assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+    assertThat(ex.getCause()).isNotNull();
     server.verify();
 }
 
@@ -124,6 +158,19 @@ void shouldFindVehicleByPlate() {
 }
 
 @Test
+void shouldThrowVehicleServiceException_whenFindByPlateUnreachable() {
+    // GIVEN: vehicle-service caido / devuelve 500 (no 404, eso es negocio)
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withServerError());
+
+    // WHEN & THEN
+    assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.findByPlate("1234ABC"));
+    server.verify();
+}
+
+@Test
 void shouldReturnEmptyWhenPlateNotFound() {
     // GIVEN: vehicle-service no conoce la matricula (no debe crearla)
     server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
@@ -135,6 +182,20 @@ void shouldReturnEmptyWhenPlateNotFound() {
 
     // THEN
     assertTrue(vehicleInfo.isEmpty());
+    server.verify();
+}
+
+@Test
+void shouldThrowVehicleServiceException_whenFindByIdUnreachable() {
+    // GIVEN: vehicle-service caido / devuelve 500 (no 404, eso es negocio)
+    UUID vehicleId = UUID.randomUUID();
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/" + vehicleId))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withServerError());
+
+    // WHEN & THEN
+    assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.findById(vehicleId));
     server.verify();
 }
 
@@ -189,7 +250,7 @@ void shouldThrowWhenResponseHasNoUniqueId() {
             .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
     // WHEN & THEN
-    assertThrows(IllegalStateException.class,
+    assertThrows(VehicleServiceException.class,
             () -> stayVehicleClientAdapter.findByPlate("1234ABC"));
     server.verify();
 }

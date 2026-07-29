@@ -1,6 +1,7 @@
 package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
+import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client.StayTicketClientAdapter;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,11 +14,14 @@ import org.springframework.web.client.RestClient;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withNoContent;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class StayTicketClientAdapterTest {
@@ -63,6 +67,36 @@ class StayTicketClientAdapterTest {
     }
 
     @Test
+    void shouldThrowTicketServiceException_whenIssueEntryTicketUnreachable() {
+        // GIVEN: ticket-service caido / devuelve 500 (fallo de infraestructura, no de negocio)
+        server.expect(requestTo("http://ticket-service:8080/v1/entry-tickets"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        // WHEN & THEN: no debe colarse la RestClientException cruda
+        TicketServiceException ex = assertThrows(TicketServiceException.class, () ->
+            stayTicketClientAdapter.issueEntryTicket(UUID.randomUUID(), "1234ABC", Instant.now())
+        );
+        assertThat(ex.getCause()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowTicketServiceException_whenEntryTicketResponseEmpty() {
+        // GIVEN: respuesta 204 sin cuerpo (contrato incumplido por ticket-service)
+        server.expect(requestTo("http://ticket-service:8080/v1/entry-tickets"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withNoContent());
+
+        // WHEN & THEN: sin esto, CheckInUseCase explotaria con NullPointerException
+        // cruda al leer ticket.ticketId().
+        assertThrows(TicketServiceException.class, () ->
+            stayTicketClientAdapter.issueEntryTicket(UUID.randomUUID(), "1234ABC", Instant.now())
+        );
+        server.verify();
+    }
+
+    @Test
     void shouldIssueExitTicket() {
         // GIVEN: TicketRequest de ticket-service (POST /v1/tickets) solo acepta
         // stayId, y TicketResponse identifica el ticket como "uniqueId".
@@ -95,10 +129,25 @@ class StayTicketClientAdapterTest {
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
         // WHEN & THEN
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(TicketServiceException.class, () ->
             stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId)
         );
 
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowTicketServiceException_whenIssueExitTicketUnreachable() {
+        // GIVEN: ticket-service caido / devuelve 500 (fallo de infraestructura, no de negocio)
+        server.expect(requestTo("http://ticket-service:8080/v1/tickets"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        // WHEN & THEN: no debe colarse la RestClientException cruda
+        TicketServiceException ex = assertThrows(TicketServiceException.class, () ->
+            stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID())
+        );
+        assertThat(ex.getCause()).isNotNull();
         server.verify();
     }
 }

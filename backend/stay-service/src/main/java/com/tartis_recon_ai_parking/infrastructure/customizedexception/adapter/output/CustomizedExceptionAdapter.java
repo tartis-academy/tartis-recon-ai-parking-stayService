@@ -2,12 +2,19 @@ package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.o
 
 import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException;
+import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleDeactivatedException;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -25,8 +32,12 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li><b>400</b> — matricula vacia / tipo de vehiculo invalido / validacion de campos</li>
  *   <li><b>404</b> — estancia inexistente (consultas)</li>
- *   <li><b>409</b> — parking completo (RN-01) o vehiculo ya dentro (IN-02, CB-05)</li>
+ *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05)
+ *       o sin tarifa activa configurada (IN-08)</li>
  *   <li><b>422</b> — vehiculo dado de baja (RN-11)</li>
+ *   <li><b>503</b> — un servicio externo (spot/tariff/ticket/vehicle) no responde
+ *       o falla por un motivo que no es de negocio</li>
+ *   <li><b>500</b> — cualquier otra excepcion no anticipada (red de seguridad)</li>
  * </ul>
  *
  * <p>Los tres casos de denegacion (409, 422) comparten consecuencia fisica: la
@@ -34,6 +45,8 @@ import java.util.stream.Collectors;
  */
 @RestControllerAdvice
 public class CustomizedExceptionAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(CustomizedExceptionAdapter.class);
 
     /** RN-01 / CA-01 de HU-01: parking completo para ese tipo de vehiculo. */
     @ExceptionHandler(NoAvailableSpotException.class)
@@ -68,6 +81,63 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    /**
+     * spot-service caido, con timeout o devolviendo un error que no es de
+     * negocio. Se traduce a 503 en vez de dejar pasar la excepcion cruda de red
+     * (IN-36): el frontend puede mostrar "servicio de plazas no disponible" en
+     * vez de un error generico sin mensaje interpretable.
+     */
+
+    @ExceptionHandler(SpotServiceException.class)
+    public ResponseEntity<ErrorResponse> handleSpotServiceUnavailable(SpotServiceException ex,
+                                                                      HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /** IN-08: tariff-service respondio correctamente pero no hay tarifa activa. */
+    @ExceptionHandler(NoActiveTariffException.class)
+    public ResponseEntity<ErrorResponse> handleNoActiveTariff(NoActiveTariffException ex,
+                                                              HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * tariff-service caido, con timeout, con error 5xx, o incumpliendo su propio
+     * contrato (respuesta 200 sin importe). Igual que {@link SpotServiceException},
+     * nunca debe llegar sin traducir al frontend (IN-36).
+     */
+    
+    @ExceptionHandler(TariffServiceException.class)
+    public ResponseEntity<ErrorResponse> handleTariffServiceUnavailable(TariffServiceException ex,
+                                                                        HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /**
+     * ticket-service caido, con timeout, con error 5xx, o incumpliendo su propio
+     * contrato (sin ticket de entrada, o sin uniqueId al emitir uno de salida).
+     * Igual que {@link SpotServiceException} y {@link TariffServiceException},
+     * nunca debe llegar sin traducir al frontend (IN-36).
+     */
+    @ExceptionHandler(TicketServiceException.class)
+    public ResponseEntity<ErrorResponse> handleTicketServiceUnavailable(TicketServiceException ex,
+                                                                        HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /**
+     * vehicle-service caido, con timeout, con error 5xx, o incumpliendo su
+     * propio contrato (respuesta sin uniqueId). El 404 de "matricula no
+     * registrada todavia" NO pasa por aqui: es negocio y ya se resuelve dentro
+     * del propio adaptador. Igual que los demas servicios externos, nunca debe
+     * llegar sin traducir al frontend (IN-36).
+     */
+    @ExceptionHandler(VehicleServiceException.class)
+    public ResponseEntity<ErrorResponse> handleVehicleServiceUnavailable(VehicleServiceException ex,
+                                                                         HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
     /** Validacion de campos de la peticion (@Valid). */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex,
@@ -76,6 +146,24 @@ public class CustomizedExceptionAdapter {
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return build(HttpStatus.BAD_REQUEST, message, request);
+    }
+
+    /**
+     * Red de seguridad (IN-36): cualquier excepcion que no tenga un handler mas
+     * especifico cae aqui en vez de escapar sin traducir hacia el manejo de
+     * errores por defecto de Spring. Spring elige siempre el handler mas
+     * concreto disponible, asi que este solo se activa cuando de verdad no hay
+     * nada mas especifico (bugs, fallos de infraestructura no anticipados...).
+     *
+     * <p>El detalle completo (clase, mensaje, stack trace) se registra en el log
+     * del servidor para depurar; al cliente solo le llega un mensaje generico y
+     * seguro, nunca la excepcion real. Es lo que garantiza que el navegador
+     * jamas vea una respuesta sin traducir (texto plano / stack trace crudo).
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
+        log.error("Excepcion no controlada en {}", request.getRequestURI(), ex);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado", request);
     }
 
     private static ResponseEntity<ErrorResponse> build(HttpStatus status,

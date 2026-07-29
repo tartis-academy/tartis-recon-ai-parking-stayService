@@ -1,8 +1,7 @@
--- DDL para el perfil prod (ddl-auto=validate): sin Flyway/Liquibase todavia,
--- el esquema se crea fuera de banda. Debe reflejar exactamente StayEntity.
--- Se monta como init script en la Postgres dedicada de stay-service.
-
-CREATE TABLE IF NOT EXISTS stays (
+-- RECON-812: migracion baseline de Flyway, sustituye al schema.sql que se
+-- montaba como init script de Postgres. Debe reflejar exactamente
+-- StayEntity.
+CREATE TABLE stays (
     unique_id    UUID PRIMARY KEY,
     vehicle_id   UUID NOT NULL,
     vehicle_type VARCHAR(20) NOT NULL,
