@@ -62,3 +62,64 @@ jobs:
           -Dsonar.organization=1dd0rv
           -Dsonar.host.url=https://sonarcloud.io
           -Dsonar.qualitygate.wait=true
+
+  # RECON-813: escaneo de vulnerabilidades de la imagen final con Trivy.
+  # Job separado y en paralelo a build: el Dockerfile hace su propio
+  # 'mvn package' por dentro, meterlo como step secuencial duplicaria el build
+  # Maven en el camino critico del pipeline.
+  docker-scan:
+    runs-on: ubuntu-latest
+
+    # security-events: write es lo que permite subir el SARIF a la pestana
+    # Security. Se declara aqui y no a nivel de workflow para que build siga
+    # con el 'contents: read' minimo.
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # load: true deja la imagen en el daemon local para que Trivy la lea por
+      # nombre; push: false, aqui no se publica nada. cache-from/to reutiliza
+      # las capas (incluida la de dependencias Maven) entre runs.
+      - name: Construir imagen
+        uses: docker/build-push-action@v7.3.0
+        with:
+          context: backend/stay-service
+          push: false
+          load: true
+          tags: stay-service:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Primero el SARIF con exit-code 0: asi el informe llega a la pestana
+      # Security aunque el gate de abajo tumbe el job.
+      - name: Trivy - informe SARIF (CRITICAL + HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: stay-service:${{ github.sha }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '0'
+
+      - name: Subir SARIF a la pestana Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      # El gate real: solo CRITICAL tumba el job. Trivy lee automaticamente el
+      # .trivyignore de la raiz del repo si existe, que es el mecanismo para
+      # ignorar explicitamente una CVE concreta.
+      - name: Trivy - quality gate (CRITICAL bloquea)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: stay-service:${{ github.sha }}
+          scanners: vuln
+          severity: CRITICAL
+          format: table
+          exit-code: '1'
