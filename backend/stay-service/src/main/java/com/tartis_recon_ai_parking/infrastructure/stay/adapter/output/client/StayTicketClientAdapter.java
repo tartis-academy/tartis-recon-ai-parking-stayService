@@ -1,9 +1,12 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
+import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.time.Instant;
 import java.util.Map;
@@ -23,29 +26,60 @@ public class StayTicketClientAdapter implements StayTicketPort {
 
     @Override
 public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issuedAt) {
-    return restClient.post()
-            .uri("/v1/entry-tickets") // La raíz del recurso sin añadir /entry
-            .body(Map.of(
-                    "stayId", stayId,
-                    "plate", plate,
-                    "issuedAt", issuedAt.toString()
-            ))
-            .retrieve()
-            .body(EntryTicketInfo.class);
+    EntryTicketInfo response;
+    try {
+        response = restClient.post()
+                .uri("/v1/entry-tickets") // La raíz del recurso sin añadir /entry
+                .body(Map.of(
+                        "stayId", stayId,
+                        "plate", plate,
+                        "issuedAt", issuedAt.toString()
+                ))
+                .retrieve()
+                .body(EntryTicketInfo.class);
+    } catch (RestClientException e) {
+        // ticket-service caido, timeout, 5xx... se traduce para que el frontend
+        // reciba un ErrorResponse interpretable en vez de una excepcion de red
+        // cruda (IN-36).
+        throw new TicketServiceException(
+                "No se pudo contactar con ticket-service para emitir el ticket de entrada de la estancia "
+                        + stayId, e);
+    }
+
+    if (response == null) {
+        // Respuesta 200 pero sin cuerpo: contrato incumplido por ticket-service.
+        // Sin esto, un CheckInResultDTO con ticket null explota mas adelante con
+        // una NullPointerException cruda al leer ticket.ticketId().
+        throw new TicketServiceException(
+                "ticket-service no devolvió el ticket de entrada para la estancia " + stayId);
+    }
+
+    return response;
 }
 
     @Override
     public UUID issueExitTicket(UUID stayId, UUID entryTicketId) {
         // TicketRequest de ticket-service (POST /v1/tickets) solo acepta stayId;
         // entryTicketId no forma parte de su contrato todavia.
-        Map<?, ?> response = restClient.post()
-                .uri("/v1/tickets")
-                .body(Map.of("stayId", stayId.toString()))
-                .retrieve()
-                .body(Map.class);
+        Map<?, ?> response;
+        try {
+            response = restClient.post()
+                    .uri("/v1/tickets")
+                    .body(Map.of("stayId", stayId.toString()))
+                    .retrieve()
+                    .body(Map.class);
+        } catch (RestClientException e) {
+            throw new TicketServiceException(
+                    "No se pudo contactar con ticket-service para emitir el ticket de salida de la estancia "
+                            + stayId, e);
+        }
 
         if (response == null || !response.containsKey("uniqueId")) {
-            throw new IllegalStateException("Error al generar el ticket de salida");
+            // Respuesta valida en forma pero incompleta: no hay un caso de negocio
+            // legitimo en el que emitir un ticket de salida deba denegarse, asi que
+            // esto es siempre un fallo de contrato de ticket-service, no del check-out.
+            throw new TicketServiceException(
+                    "ticket-service no devolvió el ticket de salida para la estancia " + stayId);
         }
 
         return UUID.fromString((String) response.get("uniqueId"));

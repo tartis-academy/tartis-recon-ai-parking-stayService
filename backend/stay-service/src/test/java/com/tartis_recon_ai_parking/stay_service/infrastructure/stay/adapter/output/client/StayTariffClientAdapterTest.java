@@ -1,6 +1,8 @@
 package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client.StayTariffClientAdapter;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -13,12 +15,14 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class StayTariffClientAdapterTest {
@@ -70,7 +74,7 @@ class StayTariffClientAdapterTest {
 
     @Test
     void shouldThrowExceptionWhenNoActiveTariffFound() {
-        // GIVEN
+        // GIVEN: tariff-service responde 200 pero con la lista vacia (IN-08)
         String emptyJsonResponse = "[]";
 
         server.expect(requestTo("http://tariff-service:8080/v1/tariffs/active?type=MOTORBIKE"))
@@ -78,10 +82,25 @@ class StayTariffClientAdapterTest {
                 .andRespond(withSuccess(emptyJsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN & THEN
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(NoActiveTariffException.class, () ->
             stayTariffClientAdapter.getActiveTariffId(VehicleType.MOTORBIKE)
         );
 
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowTariffServiceException_whenGetActiveTariffUnreachable() {
+        // GIVEN: tariff-service caido / devuelve 500 (fallo de infraestructura, no de negocio)
+        server.expect(requestTo("http://tariff-service:8080/v1/tariffs/active?type=CAR"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withServerError());
+
+        // WHEN & THEN: no debe colarse la RestClientException cruda
+        TariffServiceException ex = assertThrows(TariffServiceException.class, () ->
+            stayTariffClientAdapter.getActiveTariffId(VehicleType.CAR)
+        );
+        assertThat(ex.getCause()).isNotNull();
         server.verify();
     }
 
@@ -117,10 +136,25 @@ class StayTariffClientAdapterTest {
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN & THEN
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(TariffServiceException.class, () ->
             stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L)
         );
 
+        server.verify();
+    }
+
+    @Test
+    void shouldThrowTariffServiceException_whenCalculateAmountUnreachable() {
+        // GIVEN: tariff-service caido / devuelve 500 (fallo de infraestructura, no de negocio)
+        server.expect(requestTo("http://tariff-service:8080/v1/tariffs/calculate"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        // WHEN & THEN: no debe colarse la RestClientException cruda
+        TariffServiceException ex = assertThrows(TariffServiceException.class, () ->
+            stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L)
+        );
+        assertThat(ex.getCause()).isNotNull();
         server.verify();
     }
 }
