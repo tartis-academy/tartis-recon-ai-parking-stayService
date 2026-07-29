@@ -18,6 +18,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.re
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -67,6 +68,7 @@ public class StayRestAdapter {
      * baja (RN-11).
      */
     @PostMapping("/check-in")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<CheckInResponse> checkIn(@Valid @RequestBody StayRequest request) {
         CheckInResultDTO result = checkInUseCase.execute(mapper.toCreateDTO(request));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -74,6 +76,7 @@ public class StayRestAdapter {
     }
 
     @PostMapping("/check-out")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<CheckOutResponse> checkOut(@RequestBody StayCheckOutRequest request) {
         CheckOutResultDTO result = checkOutUseCase.execute(mapper.toCheckOutDTO(request));
         return ResponseEntity.ok(mapper.toCheckOutResponse(result, request.plate));
@@ -81,6 +84,7 @@ public class StayRestAdapter {
 
     /** Detalle de una estancia (HU-08). 404 si no existe. */
     @GetMapping("/{stayId}")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'OPERARIO')")
     public ResponseEntity<StayResponse> getStay(@PathVariable UUID stayId) {
         StayDTO stay = getStayUseCase.execute(stayId);
         return ResponseEntity.ok(mapper.toStayResponse(stay));
@@ -92,6 +96,7 @@ public class StayRestAdapter {
      * el dominio no guarda la matricula (queda diferido).
      */
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<StayPageResponse> listStays(
             @RequestParam(required = false) StayStatus status,
             @RequestParam(defaultValue = "0") int page,

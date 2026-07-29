@@ -5,6 +5,7 @@ import com.tartis_recon_ai_parking.application.stay.usecase.GetActiveStayUseCase
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.StayResponse;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +27,7 @@ public class ActiveStayRestAdapter {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<StayResponse> getActiveStay(@PathVariable("id") UUID id) {
         StayDTO stay = getActiveStayUseCase.execute(id);
         return ResponseEntity.ok(mapper.toStayResponse(stay));
