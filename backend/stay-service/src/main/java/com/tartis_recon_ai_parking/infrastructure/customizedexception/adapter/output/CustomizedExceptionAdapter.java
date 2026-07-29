@@ -30,7 +30,8 @@ import java.util.stream.Collectors;
  *
  * <p>Codigos del check-in ({@code POST /v1/stays/check-in}), segun el openapi.yml:
  * <ul>
- *   <li><b>400</b> — matricula vacia / tipo de vehiculo invalido / validacion de campos</li>
+ *   <li><b>400</b> — matricula vacia / tipo de vehiculo invalido / validacion de campos
+ *       / matricula rechazada por vehicle-service (formato invalido)</li>
  *   <li><b>404</b> — estancia inexistente (consultas)</li>
  *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05)
  *       o sin tarifa activa configurada (IN-08)</li>
