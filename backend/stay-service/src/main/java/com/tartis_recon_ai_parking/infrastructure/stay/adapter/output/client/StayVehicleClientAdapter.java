@@ -2,6 +2,7 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.VehicleResponse;
 
@@ -50,14 +51,31 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
                     ))
                     .retrieve()
                     .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
+        } catch (HttpClientErrorException creationRejected) {
+            // vehicle-service valida el formato de la matricula (p.ej. longitud,
+            // caracteres) y rechaza el alta con 4xx: es un dato de entrada
+            // invalido del propio check-in, no un fallo de vehicle-service. Sin
+            // esto, una matricula mal escrita en el totem se traducia como "503
+            // servicio no disponible" en vez de "400 matricula invalida".
+            throw new InvalidStayException(
+                    "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
+                            + creationRejected.getStatusCode() + ")",
+                    creationRejected);
         } catch (RestClientException creationFailure) {
             throw new VehicleServiceException(
                     "No se pudo contactar con vehicle-service para dar de alta el vehiculo " + plate,
                     creationFailure);
         }
+    } catch (HttpClientErrorException e) {
+        // Mismo caso que arriba pero en la propia consulta (algunos vehicle-service
+        // validan el formato tambien en el GET, antes de responder 404/200).
+        throw new InvalidStayException(
+                "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
+                        + e.getStatusCode() + ")",
+                e);
     } catch (RestClientException e) {
-        // vehicle-service caido, timeout, 5xx... no confundir con el 404 de
-        // arriba (ese es negocio); se traduce para que el frontend reciba un
+        // vehicle-service caido, timeout, 5xx... no confundir con el 404/4xx de
+        // arriba (esos son negocio); se traduce para que el frontend reciba un
         // ErrorResponse interpretable en vez de una excepcion de red cruda (IN-36).
         throw new VehicleServiceException(
                 "No se pudo contactar con vehicle-service para consultar el vehiculo " + plate, e);
@@ -77,6 +95,13 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
             return Optional.of(toVehicleInfo(response, plate, null));
         } catch (HttpClientErrorException.NotFound e) {
             return Optional.empty();
+        } catch (HttpClientErrorException e) {
+            // Matricula con formato invalido: dato de entrada erroneo, no un
+            // fallo de vehicle-service (mismo caso que en getOrCreateVehicle).
+            throw new InvalidStayException(
+                    "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
+                            + e.getStatusCode() + ")",
+                    e);
         } catch (RestClientException e) {
             throw new VehicleServiceException(
                     "No se pudo contactar con vehicle-service para consultar el vehiculo " + plate, e);

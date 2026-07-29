@@ -2,6 +2,7 @@ package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.out
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client.StayVehicleClientAdapter;
 
@@ -100,6 +101,35 @@ void shouldThrowVehicleServiceException_whenGetOrCreateVehiclePostFails() {
 }
 
 @Test
+void shouldThrowInvalidStayException_whenPlateRejectedOnLookup() {
+    // GIVEN: vehicle-service rechaza el formato de la matricula (400), no un 404
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(400));
+
+    // WHEN & THEN: dato de entrada invalido, no "servicio no disponible"
+    assertThrows(InvalidStayException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+    server.verify();
+}
+
+@Test
+void shouldThrowInvalidStayException_whenPlateRejectedOnCreate() {
+    // GIVEN: matricula no existe (404, negocio) pero el alta la rechaza por formato (400)
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withRawStatus(400));
+
+    // WHEN & THEN
+    assertThrows(InvalidStayException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+    server.verify();
+}
+
+@Test
 void shouldCreateVehicleWhenNotFoundByPlate() {
     // GIVEN
     UUID expectedVehicleId = UUID.randomUUID();
@@ -166,6 +196,19 @@ void shouldThrowVehicleServiceException_whenFindByPlateUnreachable() {
 
     // WHEN & THEN
     assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.findByPlate("1234ABC"));
+    server.verify();
+}
+
+@Test
+void shouldThrowInvalidStayException_whenFindByPlateRejected() {
+    // GIVEN: vehicle-service rechaza el formato de la matricula (400), no un 404
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(400));
+
+    // WHEN & THEN
+    assertThrows(InvalidStayException.class,
             () -> stayVehicleClientAdapter.findByPlate("1234ABC"));
     server.verify();
 }
