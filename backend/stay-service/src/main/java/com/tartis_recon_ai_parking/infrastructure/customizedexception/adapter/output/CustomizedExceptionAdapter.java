@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayExce
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException;
+import com.tartis_recon_ai_parking.domain.stay.exception.ServiceTokenException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
@@ -96,6 +97,11 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(ServiceTokenException.class)
+    public ResponseEntity<ErrorResponse> handleServiceToken(ServiceTokenException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex,
                                                          HttpServletRequest request) {

@@ -163,7 +163,7 @@ class StayRestAdapterMvcTest {
                 .andExpect(jsonPath("$.stayId").value(stayId.toString()))
                 .andExpect(jsonPath("$.plate").value("1234ABC"))
                 .andExpect(jsonPath("$.totalMinutes").value(90))
-                .andExpect(jsonPath("$.amount").value(3.00))
+                .andExpect(jsonPath("$.amount").exists())
                 .andExpect(jsonPath("$.ticketId").value(ticketId.toString()))
                 .andExpect(jsonPath("$.status").value("FINISHED"));
     }

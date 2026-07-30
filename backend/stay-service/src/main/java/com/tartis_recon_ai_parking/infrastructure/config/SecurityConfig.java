@@ -11,10 +11,12 @@ import org.springframework.security.oauth2.server.resource.web.DefaultBearerToke
 import org.springframework.security.web.SecurityFilterChain;
 
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.context.annotation.Profile;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@Profile("!dev")
 public class SecurityConfig {
 
     @Bean

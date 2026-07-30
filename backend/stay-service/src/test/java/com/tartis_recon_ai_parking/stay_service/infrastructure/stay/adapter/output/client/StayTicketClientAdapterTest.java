@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -111,7 +112,7 @@ class StayTicketClientAdapterTest {
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN
-        UUID exitTicketId = stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId);
+        UUID exitTicketId = stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId, BigDecimal.TEN);
 
         // THEN
         assertEquals(expectedExitTicketId, exitTicketId);
@@ -130,7 +131,7 @@ class StayTicketClientAdapterTest {
 
         // WHEN & THEN
         assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId)
+            stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId, BigDecimal.TEN)
         );
 
         server.verify();
@@ -145,7 +146,7 @@ class StayTicketClientAdapterTest {
 
         // WHEN & THEN: no debe colarse la RestClientException cruda
         TicketServiceException ex = assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID())
+            stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID(), BigDecimal.TEN)
         );
         assertThat(ex.getCause()).isNotNull();
         server.verify();

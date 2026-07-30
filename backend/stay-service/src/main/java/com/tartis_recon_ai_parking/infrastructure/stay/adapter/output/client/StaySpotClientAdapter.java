@@ -33,7 +33,15 @@ public UUID occupySpot(VehicleType vehicleType) {
     try {
         response = restClient.post()
                 .uri("/v1/spots/occupy")
-                .body(Map.of("vehicleType", vehicleType.name()))
+                // El campo se llama "type", no "vehicleType": SpotRequest de
+                // spot-service solo declara `type` y no tiene @JsonAlias, asi
+                // que "vehicleType" no bindeaba a nada. La peticion pasaba el
+                // @Valid con type=null y spot respondia
+                // 409 "No hay plazas disponibles para el tipo null",
+                // que en el check-in se leia como "el parking esta lleno"
+                // habiendo plazas AVAILABLE. Detectado levantando el stack
+                // completo el 30/07.
+                .body(Map.of("type", vehicleType.name()))
                 .retrieve()
                 .body(SpotResponse.class); // <-- Uso del DTO limpia los warnings
     } catch (HttpClientErrorException.Conflict e) {
