@@ -44,13 +44,18 @@ class StayTicketClientAdapterTest {
         UUID expectedTicketId = UUID.randomUUID();
         Instant now = Instant.parse("2026-03-30T10:00:00Z");
 
+        // Contrato real de ticket-service (EntryTicketResponse): id/code, no
+        // ticketId/barCode. Antes del fix, este fixture con los nombres que
+        // StayTicketPort.EntryTicketInfo esperaba ocultaba que en produccion
+        // Jackson dejaba ticketId/barCode a null (los nombres no casaban).
         String jsonResponse = """
                 {
-                    "ticketId": "%s",
-                    "barCode": "BC-987654321",
-                    "issuedAt": "2026-03-30T10:00:00Z"
+                    "id": "%s",
+                    "stayId": "%s",
+                    "issuedAt": "2026-03-30T10:00:00Z",
+                    "code": "BC-987654321"
                 }
-                """.formatted(expectedTicketId);
+                """.formatted(expectedTicketId, stayId);
 
         server.expect(requestTo("http://ticket-service:8080/v1/entry-tickets"))
                 .andExpect(method(HttpMethod.POST))
