@@ -16,8 +16,12 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import com.tartis_recon_ai_parking.infrastructure.config.KeycloakRoleConverter;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -32,7 +36,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(ActiveStayRestAdapter.class)
 @Import({SecurityConfig.class, StayRestMapper.class, CustomizedExceptionAdapter.class})
+@ActiveProfiles("test")
 class ActiveStayRestAdapterMvcTest {
+
+    @org.springframework.boot.test.context.TestConfiguration
+    static class TestConfig {
+        @org.springframework.context.annotation.Bean
+        public com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                    .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -60,7 +75,7 @@ class ActiveStayRestAdapterMvcTest {
         when(getActiveStayUseCase.execute(eq(vehicleId))).thenReturn(stayDTO);
 
         mockMvc.perform(get("/v1/activeStay/" + vehicleId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stayId").value(stayId.toString()))
@@ -79,7 +94,7 @@ class ActiveStayRestAdapterMvcTest {
                 .thenThrow(StayNotFoundException.activeByVehicleId(id));
 
         mockMvc.perform(get("/v1/activeStay/" + id)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
@@ -99,7 +114,7 @@ class ActiveStayRestAdapterMvcTest {
         when(getActiveStayUseCase.execute(eq(vehicleId))).thenReturn(stayDTO);
 
         mockMvc.perform(get("/v1/activeStay/" + vehicleId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OPERARIO")))
+                        .with(operarioJwt())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
     }
@@ -109,7 +124,7 @@ class ActiveStayRestAdapterMvcTest {
     void shouldDenyGetActiveStayForUser() throws Exception {
         UUID vehicleId = UUID.randomUUID();
         mockMvc.perform(get("/v1/activeStay/" + vehicleId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER")))
+                        .with(userJwt())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden());
         verify(getActiveStayUseCase, never()).execute(any());
@@ -120,5 +135,32 @@ class ActiveStayRestAdapterMvcTest {
     void shouldReturn401WhenNoTokenProvided() throws Exception {
         mockMvc.perform(get("/v1/activeStay/" + UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor adminJwt() {
+        return jwt()
+                .jwt(j -> j
+                        .claim("sub", UUID.randomUUID().toString())
+                        .claim("realm_access", Map.of("roles", List.of("ADMIN")))
+                )
+                .authorities(new KeycloakRoleConverter());
+    }
+
+    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor operarioJwt() {
+        return jwt()
+                .jwt(j -> j
+                        .claim("sub", UUID.randomUUID().toString())
+                        .claim("realm_access", Map.of("roles", List.of("OPERARIO")))
+                )
+                .authorities(new KeycloakRoleConverter());
+    }
+
+    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor userJwt() {
+        return jwt()
+                .jwt(j -> j
+                        .claim("sub", UUID.randomUUID().toString())
+                        .claim("realm_access", Map.of("roles", List.of("USER")))
+                )
+                .authorities(new KeycloakRoleConverter());
     }
 }

@@ -83,10 +83,17 @@ public class StayRestAdapter {
         return ResponseEntity.ok(mapper.toCheckOutResponse(result, request.plate));
     }
 
-    /** Detalle de una estancia (HU-08). 404 si no existe. */
+    /** Detalle de una estancia (HU-08). 404 si no existe.
+     *
+     * NOTA DE SEGURIDAD: Se utiliza @PostAuthorize porque necesitamos el resultado del
+     * caso de uso para obtener la matricula asociada y validar si pertenece al usuario (IDOR).
+     * Como es un endpoint GET de solo lectura, es seguro realizar la consulta a la base de datos
+     * antes de evaluar la autorizacion. NO debe replicarse este patron en endpoints de escritura,
+     * ya que la transaccion/modificacion se ejecutaria antes de comprobar el acceso.
+     */
     @GetMapping("/{stayId}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'OPERARIO')")
-    @PostAuthorize("hasAnyRole('ADMIN', 'OPERARIO') or (hasRole('USER') and returnObject.body.plate == authentication.name)")
+    @PostAuthorize("hasAnyRole('ADMIN', 'OPERARIO') or (hasRole('USER') and returnObject.body.plate == authentication.token.claims['plate'])")
     public ResponseEntity<StayResponse> getStay(@PathVariable UUID stayId) {
         StayDTO stay = getStayUseCase.execute(stayId);
         return ResponseEntity.ok(mapper.toStayResponse(stay));

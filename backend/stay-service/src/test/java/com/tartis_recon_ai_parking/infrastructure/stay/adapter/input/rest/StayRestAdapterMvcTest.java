@@ -16,6 +16,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotExceptio
 import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleDeactivatedException;
 import com.tartis_recon_ai_parking.infrastructure.config.SecurityConfig;
+import com.tartis_recon_ai_parking.infrastructure.config.KeycloakRoleConverter;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.CustomizedExceptionAdapter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,9 +28,11 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.test.context.ActiveProfiles;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -46,7 +49,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(StayRestAdapter.class)
 @Import({SecurityConfig.class, StayRestMapper.class, CustomizedExceptionAdapter.class})
+@ActiveProfiles("test")
 class StayRestAdapterMvcTest {
+
+    @org.springframework.boot.test.context.TestConfiguration
+    static class TestConfig {
+        @org.springframework.context.annotation.Bean
+        public com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                    .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -81,7 +95,7 @@ class StayRestAdapterMvcTest {
         when(checkInUseCase.execute(any())).thenReturn(new CheckInResultDTO(dto, entryTicket));
 
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
                 .andExpect(status().isCreated())
@@ -100,7 +114,7 @@ class StayRestAdapterMvcTest {
                 .thenThrow(new VehicleDeactivatedException("vehiculo de baja"));
 
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
                 .andExpect(status().isUnprocessableEntity())
@@ -115,7 +129,7 @@ class StayRestAdapterMvcTest {
                 .thenThrow(new NoAvailableSpotException("parking completo"));
 
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
                 .andExpect(status().isConflict())
@@ -129,7 +143,7 @@ class StayRestAdapterMvcTest {
                 .thenThrow(new DuplicateActiveStayException("ya dentro"));
 
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
                 .andExpect(status().isConflict());
@@ -139,7 +153,7 @@ class StayRestAdapterMvcTest {
     @DisplayName("tipo de vehiculo no reconocido -> 400 (lo detecta el mapper real)")
     void checkIn_invalidType_returns400() throws Exception {
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"TRUCK\"}"))
                 .andExpect(status().isBadRequest());
@@ -156,7 +170,7 @@ class StayRestAdapterMvcTest {
         when(checkOutUseCase.execute(any())).thenReturn(new CheckOutResultDTO(dto, ticketId, 90L));
 
         mockMvc.perform(post("/v1/stays/check-out")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
                 .andExpect(status().isOk())
@@ -175,7 +189,7 @@ class StayRestAdapterMvcTest {
                 .thenThrow(new StayNotFoundException("sin estancia en curso"));
 
         mockMvc.perform(post("/v1/stays/check-out")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                        .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
                 .andExpect(status().isNotFound())
@@ -192,7 +206,7 @@ class StayRestAdapterMvcTest {
                 Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS));
 
         mockMvc.perform(get("/v1/stays/{stayId}", stayId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                        .with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stayId").value(stayId.toString()))
                 .andExpect(jsonPath("$.spotId").value(spotId.toString()))
@@ -206,7 +220,7 @@ class StayRestAdapterMvcTest {
         when(getStayUseCase.execute(stayId)).thenThrow(StayNotFoundException.withId(stayId));
 
         mockMvc.perform(get("/v1/stays/{stayId}", stayId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                        .with(adminJwt()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }
@@ -225,7 +239,7 @@ class StayRestAdapterMvcTest {
                         .param("status", "IN_PROGRESS")
                         .param("page", "0")
                         .param("size", "20")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                        .with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].stayId").value(stayId.toString()))
                 .andExpect(jsonPath("$.content[0].status").value("IN_PROGRESS"))
@@ -242,7 +256,7 @@ class StayRestAdapterMvcTest {
                 .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+                        .with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.page").value(0))
@@ -269,7 +283,7 @@ class StayRestAdapterMvcTest {
         when(checkInUseCase.execute(any())).thenReturn(new CheckInResultDTO(dto, ticket));
 
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OPERARIO")))
+                        .with(operarioJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
                 .andExpect(status().isCreated());
@@ -279,7 +293,7 @@ class StayRestAdapterMvcTest {
     @DisplayName("USER: Debe denegar check-in (403)")
     void shouldDenyCheckInForUser() throws Exception {
         mockMvc.perform(post("/v1/stays/check-in")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER")))
+                        .with(userJwt("1234ABC"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
                 .andExpect(status().isForbidden());
@@ -293,7 +307,7 @@ class StayRestAdapterMvcTest {
         when(checkOutUseCase.execute(any())).thenReturn(new CheckOutResultDTO(dto, UUID.randomUUID(), 60L));
 
         mockMvc.perform(post("/v1/stays/check-out")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OPERARIO")))
+                        .with(operarioJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
                 .andExpect(status().isOk());
@@ -303,7 +317,7 @@ class StayRestAdapterMvcTest {
     @DisplayName("USER: Debe denegar check-out (403)")
     void shouldDenyCheckOutForUser() throws Exception {
         mockMvc.perform(post("/v1/stays/check-out")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER")))
+                        .with(userJwt("1234ABC"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plate\":\"1234ABC\"}"))
                 .andExpect(status().isForbidden());
@@ -318,7 +332,7 @@ class StayRestAdapterMvcTest {
         when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS, plate));
 
         mockMvc.perform(get("/v1/stays/{stayId}", stayId)
-                        .with(jwt().jwt(j -> j.claim("sub", plate)).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                        .with(userJwt(plate)))
                 .andExpect(status().isOk());
     }
 
@@ -331,7 +345,7 @@ class StayRestAdapterMvcTest {
         when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS, stayPlate));
 
         mockMvc.perform(get("/v1/stays/{stayId}", stayId)
-                        .with(jwt().jwt(j -> j.claim("sub", userPlate)).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                        .with(userJwt(userPlate)))
                 .andExpect(status().isForbidden());
     }
 
@@ -339,7 +353,7 @@ class StayRestAdapterMvcTest {
     @DisplayName("USER: Debe denegar listar todas las estancias (403)")
     void shouldDenyListStaysForUser() throws Exception {
         mockMvc.perform(get("/v1/stays")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                        .with(userJwt("1234ABC")))
                 .andExpect(status().isForbidden());
         verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
     }
@@ -351,7 +365,7 @@ class StayRestAdapterMvcTest {
         when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS));
 
         mockMvc.perform(get("/v1/stays/{stayId}", stayId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OPERARIO"))))
+                        .with(operarioJwt()))
                 .andExpect(status().isOk());
     }
 
@@ -362,7 +376,37 @@ class StayRestAdapterMvcTest {
                 .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OPERARIO"))))
+                        .with(operarioJwt()))
                 .andExpect(status().isOk());
+    }
+
+    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor adminJwt() {
+        return jwt()
+                .jwt(j -> j
+                        .claim("sub", UUID.randomUUID().toString())
+                        .claim("realm_access", Map.of("roles", List.of("ADMIN")))
+                )
+                .authorities(new KeycloakRoleConverter());
+    }
+
+    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor operarioJwt() {
+        return jwt()
+                .jwt(j -> j
+                        .claim("sub", UUID.randomUUID().toString())
+                        .claim("realm_access", Map.of("roles", List.of("OPERARIO")))
+                )
+                .authorities(new KeycloakRoleConverter());
+    }
+
+    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor userJwt(String plate) {
+        return jwt()
+                .jwt(j -> {
+                    j.claim("sub", UUID.randomUUID().toString());
+                    j.claim("realm_access", Map.of("roles", List.of("USER")));
+                    if (plate != null) {
+                        j.claim("plate", plate);
+                    }
+                })
+                .authorities(new KeycloakRoleConverter());
     }
 }
