@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -58,14 +59,17 @@ public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issue
 }
 
     @Override
-    public UUID issueExitTicket(UUID stayId, UUID entryTicketId) {
-        // TicketRequest de ticket-service (POST /v1/tickets) solo acepta stayId;
+    public UUID issueExitTicket(UUID stayId, UUID entryTicketId, BigDecimal totalAmount) {
+        // TicketRequest de ticket-service (POST /v1/tickets) solo acepta stayId y totalAmount;
         // entryTicketId no forma parte de su contrato todavia.
         Map<?, ?> response;
         try {
             response = restClient.post()
                     .uri("/v1/tickets")
-                    .body(Map.of("stayId", stayId.toString()))
+                    .body(Map.of(
+                            "stayId", stayId.toString(),
+                            "totalAmount", totalAmount
+                    ))
                     .retrieve()
                     .body(Map.class);
         } catch (RestClientException e) {
