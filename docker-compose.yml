@@ -24,6 +24,27 @@ services:
       retries: 5
     networks:
       - parking-shared
+  # Broker de mensajeria (ASY-02/ASY-03). Broker UNICO compartido por
+  # stay-service (publicador) y ticket-service/spot-service (consumidores),
+  # a diferencia del Postgres de arriba que es dedicado por servicio.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: parking-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      # UI de administracion: http://localhost:15672
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - parking-shared
 
 volumes:
   parking-stay-postgres-data:

@@ -2,11 +2,11 @@ package com.tartis_recon_ai_parking.application.stay.usecase;
 
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
-import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
-import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort.VehicleInfo;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
@@ -20,7 +20,6 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.UUID;
 
 public class CheckOutUseCase {
 
@@ -29,23 +28,20 @@ public class CheckOutUseCase {
     private final StayPersistence stayPersistence;
     private final StayVehiclePort vehiclePort;
     private final StayTariffPort tariffPort;
-    private final StaySpotPort spotPort;
-    private final StayTicketPort ticketPort;
+    private final StayEventPublisher eventPublisher;
     private final StayDTOFactory stayDTOFactory;
     private final Clock clock;
 
     public CheckOutUseCase(StayPersistence stayPersistence,
                            StayVehiclePort vehiclePort,
                            StayTariffPort tariffPort,
-                           StaySpotPort spotPort,
-                           StayTicketPort ticketPort,
+                           StayEventPublisher eventPublisher,
                            StayDTOFactory stayDTOFactory,
                            Clock clock) {
         this.stayPersistence = stayPersistence;
         this.vehiclePort = vehiclePort;
         this.tariffPort = tariffPort;
-        this.spotPort = spotPort;
-        this.ticketPort = ticketPort;
+        this.eventPublisher = eventPublisher;
         this.stayDTOFactory = stayDTOFactory;
         this.clock = clock;
     }
@@ -62,31 +58,45 @@ public class CheckOutUseCase {
                         "No existe ninguna estancia en curso para la matricula " + plate + " (HU-02 CA-02)"));
 
         Instant checkOut = clock.instant();
-
         long totalMinutes = stay.parkedMinutesUntil(checkOut);
+
+        // Unica llamada sincrona que queda: el importe tiene que ir en esta
+        // misma respuesta.
         BigDecimal amount = tariffPort.calculateAmount(stay.getVehicleType(), totalMinutes);
 
         Stay finished = stay.finish(checkOut, amount);
         Stay saved = stayPersistence.save(finished);
 
-        UUID exitTicketId;
-        try {
-            exitTicketId = ticketPort.issueExitTicket(saved.getId(), command.getEntryTicketId(), amount);
-        } finally {
-            // La plaza debe liberarse aunque falle la emision del ticket: la
-            // estancia ya quedo FINISHED (inmutable) y no debe quedar bloqueada.
-            releaseSpotQuietly(saved.getSpotId());
-        }
+        // Publicamos DESPUES de guardar: el check-out ya es valido en BD, el
+        // evento es un efecto secundario. Si falla la publicacion NO
+        // deshacemos el check-out (ver publishStayClosedEventQuietly).
+        publishStayClosedEventQuietly(saved, plate);
 
-        return new CheckOutResultDTO(stayDTOFactory.create(saved), exitTicketId, totalMinutes);
+        // exitTicketId ya no se conoce al responder: se genera al consumir
+        // el evento, de forma asincrona. Es opcional en el contrato REST.
+        return new CheckOutResultDTO(stayDTOFactory.create(saved), null, totalMinutes);
     }
 
-    private void releaseSpotQuietly(UUID spotId) {
+    private void publishStayClosedEventQuietly(Stay stay, String plate) {
         try {
-            spotPort.releaseSpot(spotId);
+            StayClosedEvent event = StayClosedEvent.of(
+                    stay.getId(),
+                    stay.getSpotId(),
+                    plate,
+                    stay.getCheckIn(),
+                    stay.getCheckOut(),
+                    stay.getTotalAmount(),
+                    clock.instant());
+            eventPublisher.publish(event);
+            log.info("StayClosedEvent publicado para la estancia {}", stay.getId());
         } catch (RuntimeException e) {
-            log.error("Check-out realizado pero la plaza {} no se pudo liberar:"
-                    + " requiere liberacion manual del administrador (IN-25)", spotId, e);
+            // La estancia ya quedo FINISHED y persistida: es la fuente de
+            // verdad. Si el broker falla, no bloqueamos al cliente, pero
+            // ticket-service y spot-service no se enteraran de este cierre
+            // (requiere revision manual).
+            log.error("Check-out realizado pero no se pudo publicar StayClosedEvent para la estancia {}:"
+                    + " ticket-service y spot-service no se enteraran de este cierre (requiere revision manual)",
+                    stay.getId(), e);
         }
     }
 
