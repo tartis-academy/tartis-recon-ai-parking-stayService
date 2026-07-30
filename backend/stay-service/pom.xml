@@ -48,6 +48,16 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
 		</dependency>
+		<!-- resource-server cubre los tokens que stay RECIBE; oauth2-client
+		     cubre los que EMITE. stay es el unico microservicio que llama a
+		     otros por HTTP y lo hace sin usuario detras (el token del usuario
+		     no se puede reenviar: no siempre hay uno, y su rol no tiene por
+		     que cubrir lo que stay necesita), asi que pide el suyo propio por
+		     client_credentials. Ver BeanConfiguration. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-client</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-test</artifactId>
