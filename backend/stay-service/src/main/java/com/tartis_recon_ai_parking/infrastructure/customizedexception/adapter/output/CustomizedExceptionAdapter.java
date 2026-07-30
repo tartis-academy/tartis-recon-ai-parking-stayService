@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayExce
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException;
+import com.tartis_recon_ai_parking.domain.stay.exception.ServiceTokenException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
@@ -136,6 +137,19 @@ public class CustomizedExceptionAdapter {
     @ExceptionHandler(VehicleServiceException.class)
     public ResponseEntity<ErrorResponse> handleVehicleServiceUnavailable(VehicleServiceException ex,
                                                                          HttpServletRequest request) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /**
+     * stay-service no pudo obtener su token de servicio (Keycloak caido o
+     * credenciales de cliente mal configuradas). Es un fallo de integracion
+     * como los de arriba y se traduce igual, a 503: sin este handler caia en
+     * la red de seguridad generica y el operador solo veia "Ha ocurrido un
+     * error inesperado" (IN-36).
+     */
+    @ExceptionHandler(ServiceTokenException.class)
+    public ResponseEntity<ErrorResponse> handleServiceToken(ServiceTokenException ex,
+                                                            HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 

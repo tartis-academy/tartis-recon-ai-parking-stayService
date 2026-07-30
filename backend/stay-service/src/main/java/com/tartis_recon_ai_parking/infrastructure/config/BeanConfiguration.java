@@ -15,6 +15,8 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
+
+import com.tartis_recon_ai_parking.domain.stay.exception.ServiceTokenException;
 import org.springframework.web.client.RestClient;
 
 @Configuration
@@ -89,16 +91,17 @@ public class BeanConfiguration {
                                 .build());
             } catch (OAuth2AuthorizationException e) {
                 // Keycloak rechaza las credenciales (secreto mal puesto, cliente
-                // que no existe) o no responde. Sin este catch sale la
-                // OAuth2AuthorizationException cruda, el handler generico la
-                // convierte en "Ha ocurrido un error inesperado" y quien
-                // depura no tiene por donde empezar.
-                throw new IllegalStateException(errorMessage(), e);
+                // que no existe) o no responde. Se traduce a una excepcion de
+                // dominio para que el handler la mapee a 503, igual que el
+                // resto de fallos de integracion (IN-36); si sale cruda, el
+                // handler generico responde "Ha ocurrido un error inesperado"
+                // y el mensaje util se queda solo en el log.
+                throw new ServiceTokenException(errorMessage(), e);
             }
 
             if (authorizedClient == null) {
                 // El manager devuelve null si el registro no esta configurado.
-                throw new IllegalStateException(errorMessage());
+                throw new ServiceTokenException(errorMessage());
             }
 
             request.getHeaders().setBearerAuth(authorizedClient.getAccessToken().getTokenValue());
