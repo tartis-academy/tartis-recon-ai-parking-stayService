@@ -149,23 +149,7 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
-    /**
-     * Red de seguridad (IN-36): cualquier excepcion que no tenga un handler mas
-     * especifico cae aqui en vez de escapar sin traducir hacia el manejo de
-     * errores por defecto de Spring. Spring elige siempre el handler mas
-     * concreto disponible, asi que este solo se activa cuando de verdad no hay
-     * nada mas especifico (bugs, fallos de infraestructura no anticipados...).
-     *
-     * <p>El detalle completo (clase, mensaje, stack trace) se registra en el log
-     * del servidor para depurar; al cliente solo le llega un mensaje generico y
-     * seguro, nunca la excepcion real. Es lo que garantiza que el navegador
-     * jamas vea una respuesta sin traducir (texto plano / stack trace crudo).
-     */
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
-        log.error("Excepcion no controlada en {}", request.getRequestURI(), ex);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado", request);
-    }
+
 
     private static ResponseEntity<ErrorResponse> build(HttpStatus status,
                                                       String message,
