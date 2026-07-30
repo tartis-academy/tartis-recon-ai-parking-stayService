@@ -21,9 +21,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 
 import java.time.Instant;
 import java.util.stream.Collectors;
+
 
 /**
  * Unico punto que traduce excepciones de dominio/aplicacion a respuestas HTTP
@@ -83,13 +86,13 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+ 
     /**
      * spot-service caido, con timeout o devolviendo un error que no es de
      * negocio. Se traduce a 503 en vez de dejar pasar la excepcion cruda de red
      * (IN-36): el frontend puede mostrar "servicio de plazas no disponible" en
      * vez de un error generico sin mensaje interpretable.
      */
-
     @ExceptionHandler(SpotServiceException.class)
     public ResponseEntity<ErrorResponse> handleSpotServiceUnavailable(SpotServiceException ex,
                                                                       HttpServletRequest request) {
@@ -103,22 +106,23 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
+    
     /**
      * tariff-service caido, con timeout, con error 5xx, o incumpliendo su propio
      * contrato (respuesta 200 sin importe). Igual que {@link SpotServiceException},
      * nunca debe llegar sin traducir al frontend (IN-36).
      */
-    
     @ExceptionHandler(TariffServiceException.class)
     public ResponseEntity<ErrorResponse> handleTariffServiceUnavailable(TariffServiceException ex,
                                                                         HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
+
     /**
      * ticket-service caido, con timeout, con error 5xx, o incumpliendo su propio
      * contrato (sin ticket de entrada, o sin uniqueId al emitir uno de salida).
-     * Igual que {@link SpotServiceException} y {@link TariffServiceException},
+     * Igual que {@link SpotServiceException} and {@link TariffServiceException},
      * nunca debe llegar sin traducir al frontend (IN-36).
      */
     @ExceptionHandler(TicketServiceException.class)
@@ -127,6 +131,7 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
+ 
     /**
      * vehicle-service caido, con timeout, con error 5xx, o incumpliendo su
      * propio contrato (respuesta sin uniqueId). El 404 de "matricula no
@@ -152,7 +157,6 @@ public class CustomizedExceptionAdapter {
                                                             HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
-
     /** Validacion de campos de la peticion (@Valid). */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex,
@@ -176,7 +180,10 @@ public class CustomizedExceptionAdapter {
      * jamas vea una respuesta sin traducir (texto plano / stack trace crudo).
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) throws Exception {
+        if (ex instanceof AccessDeniedException || ex instanceof AuthenticationException) {
+            throw ex;
+        }
         log.error("Excepcion no controlada en {}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado", request);
     }

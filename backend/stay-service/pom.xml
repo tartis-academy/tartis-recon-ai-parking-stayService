@@ -29,6 +29,8 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
+		<!-- RES-02: Spring Boot no gestiona la version de Resilience4j en su BOM. -->
+		<resilience4j.version>2.4.0</resilience4j.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -38,6 +40,10 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -76,6 +82,23 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- RES-02: circuit breaker entre stay-service y el resto de servicios.
+		     El artefacto es -spring-boot4, no -spring-boot3: la serie 3 esta
+		     compilada contra la autoconfiguracion de Boot 3 y no arranca sobre
+		     Boot 4. -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot4</artifactId>
+			<version>${resilience4j.version}</version>
+		</dependency>
+		<!-- Necesario para que funcionen las anotaciones @CircuitBreaker: el
+		     aspecto de Resilience4j se aplica por proxy AOP. En Spring Boot 4
+		     este starter se llama -aspectj (antes -aop). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aspectj</artifactId>
 		</dependency>
 
 		<!-- Serie 3.x = Spring Boot 4 (la 2.x es para Boot 3 y no arranca aqui). -->
@@ -140,6 +163,11 @@
 			<groupId>org.mapstruct</groupId>
 			<artifactId>mapstruct</artifactId>
 			<version>1.5.5.Final</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-webmvc-test</artifactId>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 

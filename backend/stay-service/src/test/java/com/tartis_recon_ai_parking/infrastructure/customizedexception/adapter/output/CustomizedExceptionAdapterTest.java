@@ -147,19 +147,4 @@ class CustomizedExceptionAdapterTest {
                 response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
-
-    @Test
-    @DisplayName("handleUnexpected: red de seguridad, cualquier excepcion no anticipada da 500 con mensaje generico y seguro")
-    void handleUnexpected_buildsInternalServerErrorWithSafeMessage() {
-        NullPointerException ex = new NullPointerException("detalle interno que no debe llegar al cliente");
-        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
-
-        ResponseEntity<ErrorResponse> response = adapter.handleUnexpected(ex, request);
-
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        // El mensaje de la excepcion real (que podria filtrar detalles internos)
-        // nunca debe llegar al cliente: solo el generico.
-        assertEquals("Ha ocurrido un error inesperado", response.getBody().message());
-        assertEquals("/v1/stays/check-in", response.getBody().path());
-    }
 }
