@@ -9,6 +9,7 @@ import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.ListStaysUseCase;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
+import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
@@ -94,9 +95,11 @@ public class StayRestAdapter {
     @GetMapping
     public ResponseEntity<StayPageResponse> listStays(
             @RequestParam(required = false) StayStatus status,
+            @RequestParam(required = false) VehicleType vehicleType,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        StayPageDTO result = listStaysUseCase.execute(status, page, size);
+        StayPageDTO result = listStaysUseCase.execute(status, vehicleType, search, page, size);
         return ResponseEntity.ok(mapper.toStayPageResponse(result));
     }
 }

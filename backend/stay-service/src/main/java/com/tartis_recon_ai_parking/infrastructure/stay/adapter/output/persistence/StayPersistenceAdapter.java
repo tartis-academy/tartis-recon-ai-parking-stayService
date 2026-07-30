@@ -55,12 +55,17 @@ public class StayPersistenceAdapter implements StayPersistence {
     }
 
     @Override
-    public StayPage findPage(StayStatus status, int page, int size) {
+    public StayPage findPage(StayStatus status, com.tartis_recon_ai_parking.domain.stay.VehicleType vehicleType, List<UUID> vehicleIds, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "checkIn"));
 
-        Page<StayEntity> result = (status == null)
-                ? repository.findAll(pageable)
-                : repository.findByStatus(status, pageable);
+        boolean filterByVehicles = vehicleIds != null;
+        List<UUID> idsToSearch = filterByVehicles && !vehicleIds.isEmpty() ? vehicleIds : List.of(UUID.randomUUID()); // Si es vacia pero debemos filtrar, mandamos un id dummy para que devuelva vacio, pero IN requiere una lista con al menos 1 elemento, asi que le mandamos random si no hay resultados y filterByVehicles=true. Si no hay filter, mandamos null.
+        if(filterByVehicles && vehicleIds.isEmpty()){
+             // If we need to filter by vehicle but no vehicles matched, return empty page
+             return new StayPage(List.of(), page, size, 0, 0);
+        }
+
+        Page<StayEntity> result = repository.findByFilters(status, vehicleType, filterByVehicles, idsToSearch, pageable);
 
         List<Stay> content = result.getContent().stream()
                 .map(mapper::toDomain)

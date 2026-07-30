@@ -6,6 +6,7 @@ import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
+import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +30,13 @@ public class ListStaysUseCase {
         this.stayDTOFactory = stayDTOFactory;
     }
 
-    public StayPageDTO execute(StayStatus status, int page, int size) {
-        StayPersistence.StayPage result = stayPersistence.findPage(status, page, size);
+    public StayPageDTO execute(StayStatus status, VehicleType vehicleType, String searchPlate, int page, int size) {
+        List<UUID> vehicleIds = null;
+        if (searchPlate != null && !searchPlate.isBlank()) {
+            vehicleIds = vehiclePort.findVehicleIdsByPlateContaining(searchPlate);
+        }
+
+        StayPersistence.StayPage result = stayPersistence.findPage(status, vehicleType, vehicleIds, page, size);
 
         // N+1 deliberado: una llamada a vehicle-service por estancia de la pagina
         // (acotado por "size", 20 por defecto). Aceptable mientras no haya un

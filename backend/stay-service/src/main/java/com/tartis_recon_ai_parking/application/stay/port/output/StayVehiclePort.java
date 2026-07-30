@@ -1,6 +1,7 @@
 package com.tartis_recon_ai_parking.application.stay.port.output;
 
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,6 +21,8 @@ public interface StayVehiclePort {
      * consultas de estancias (el dominio de stay no la guarda). Vacío si no existe.
      */
     Optional<VehicleInfo> findById(UUID vehicleId);
+
+    List<UUID> findVehicleIdsByPlateContaining(String partialPlate);
 
     record VehicleInfo(UUID vehicleId, String plate, VehicleType vehicleType, boolean active) {}
 }

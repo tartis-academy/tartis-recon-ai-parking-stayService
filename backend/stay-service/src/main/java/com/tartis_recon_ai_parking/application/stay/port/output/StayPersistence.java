@@ -24,7 +24,7 @@ public interface StayPersistence {
      * estado. La paginacion se expresa con tipos propios para no filtrar detalles
      * de Spring Data hacia la capa de aplicacion.
      */
-    StayPage findPage(StayStatus status, int page, int size);
+    StayPage findPage(StayStatus status, com.tartis_recon_ai_parking.domain.stay.VehicleType vehicleType, List<UUID> vehicleIds, int page, int size);
 
     record StayPage(List<Stay> content, int page, int size, long totalElements, int totalPages) {
     }

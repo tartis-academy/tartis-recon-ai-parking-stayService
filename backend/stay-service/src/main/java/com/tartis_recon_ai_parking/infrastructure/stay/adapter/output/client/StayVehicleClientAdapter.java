@@ -15,6 +15,10 @@ import org.springframework.web.client.RestClientException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
+import java.util.Arrays;
+import java.util.stream.Collectors;
+import java.util.UUID;
 
 @Component
 public class StayVehicleClientAdapter implements StayVehiclePort {
@@ -128,6 +132,27 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
         } catch (RestClientException e) {
             throw new VehicleServiceException(
                     "No se pudo contactar con vehicle-service para consultar el vehiculo " + vehicleId, e);
+        }
+    }
+
+    @Override
+    public List<UUID> findVehicleIdsByPlateContaining(String partialPlate) {
+        try {
+            VehicleResponse[] responses = restClient.get()
+                    .uri("/v1/vehicles")
+                    .retrieve()
+                    .body(VehicleResponse[].class);
+
+            if (responses == null) return List.of();
+
+            String lowerSearch = partialPlate.toLowerCase();
+            return Arrays.stream(responses)
+                    .filter(v -> v.plate() != null && v.plate().toLowerCase().contains(lowerSearch))
+                    .map(VehicleResponse::uniqueId)
+                    .collect(Collectors.toList());
+        } catch (RestClientException e) {
+            throw new VehicleServiceException(
+                    "No se pudo contactar con vehicle-service para buscar vehiculos por matricula " + partialPlate, e);
         }
     }
 
