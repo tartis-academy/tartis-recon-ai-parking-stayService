@@ -72,6 +72,21 @@ class KeycloakRoleConverterTest {
                 .containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_OPERARIO");
     }
 
+    @Test
+    @DisplayName("Debe devolver una coleccion vacia si el claim realm_access no es un Map")
+    void shouldReturnEmptyWhenRealmAccessIsNotAMap() {
+        Jwt.Builder builder = Jwt.withTokenValue("token")
+                .header("alg", "RS256")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(60))
+                .claim("sub", "test-user")
+                .claim("realm_access", "not-a-map");
+
+        Collection<GrantedAuthority> authorities = converter.convert(builder.build());
+
+        assertThat(authorities).isEmpty();
+    }
+
     private Jwt buildJwt(Map<String, Object> realmAccess) {
         Jwt.Builder builder = Jwt.withTokenValue("token")
                 .header("alg", "RS256")

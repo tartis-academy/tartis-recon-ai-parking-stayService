@@ -19,8 +19,19 @@ import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.ServiceTokenException;
 import org.springframework.web.client.RestClient;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+
 @Configuration
 public class BeanConfiguration {
+
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
 
     /**
      * Id del registro de {@code application.properties}, no el client-id real
