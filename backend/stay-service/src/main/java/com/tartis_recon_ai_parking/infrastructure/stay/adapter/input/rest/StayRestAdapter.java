@@ -18,6 +18,8 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.re
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -67,6 +69,7 @@ public class StayRestAdapter {
      * baja (RN-11).
      */
     @PostMapping("/check-in")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<CheckInResponse> checkIn(@Valid @RequestBody StayRequest request) {
         CheckInResultDTO result = checkInUseCase.execute(mapper.toCreateDTO(request));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -74,13 +77,23 @@ public class StayRestAdapter {
     }
 
     @PostMapping("/check-out")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<CheckOutResponse> checkOut(@RequestBody StayCheckOutRequest request) {
         CheckOutResultDTO result = checkOutUseCase.execute(mapper.toCheckOutDTO(request));
         return ResponseEntity.ok(mapper.toCheckOutResponse(result, request.plate));
     }
 
-    /** Detalle de una estancia (HU-08). 404 si no existe. */
+    /** Detalle de una estancia (HU-08). 404 si no existe.
+     *
+     * NOTA DE SEGURIDAD: Se utiliza @PostAuthorize porque necesitamos el resultado del
+     * caso de uso para obtener la matricula asociada y validar si pertenece al usuario (IDOR).
+     * Como es un endpoint GET de solo lectura, es seguro realizar la consulta a la base de datos
+     * antes de evaluar la autorizacion. NO debe replicarse este patron en endpoints de escritura,
+     * ya que la transaccion/modificacion se ejecutaria antes de comprobar el acceso.
+     */
     @GetMapping("/{stayId}")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'OPERARIO')")
+    @PostAuthorize("hasAnyRole('ADMIN', 'OPERARIO') or (hasRole('USER') and returnObject.body.plate == authentication.token.claims['plate'])")
     public ResponseEntity<StayResponse> getStay(@PathVariable UUID stayId) {
         StayDTO stay = getStayUseCase.execute(stayId);
         return ResponseEntity.ok(mapper.toStayResponse(stay));
@@ -92,6 +105,7 @@ public class StayRestAdapter {
      * el dominio no guarda la matricula (queda diferido).
      */
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
     public ResponseEntity<StayPageResponse> listStays(
             @RequestParam(required = false) StayStatus status,
             @RequestParam(defaultValue = "0") int page,

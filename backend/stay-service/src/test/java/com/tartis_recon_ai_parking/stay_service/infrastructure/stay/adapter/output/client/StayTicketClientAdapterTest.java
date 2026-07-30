@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -43,13 +44,18 @@ class StayTicketClientAdapterTest {
         UUID expectedTicketId = UUID.randomUUID();
         Instant now = Instant.parse("2026-03-30T10:00:00Z");
 
+        // Contrato real de ticket-service (EntryTicketResponse): id/code, no
+        // ticketId/barCode. Antes del fix, este fixture con los nombres que
+        // StayTicketPort.EntryTicketInfo esperaba ocultaba que en produccion
+        // Jackson dejaba ticketId/barCode a null (los nombres no casaban).
         String jsonResponse = """
                 {
-                    "ticketId": "%s",
-                    "barCode": "BC-987654321",
-                    "issuedAt": "2026-03-30T10:00:00Z"
+                    "id": "%s",
+                    "stayId": "%s",
+                    "issuedAt": "2026-03-30T10:00:00Z",
+                    "code": "BC-987654321"
                 }
-                """.formatted(expectedTicketId);
+                """.formatted(expectedTicketId, stayId);
 
         server.expect(requestTo("http://ticket-service:8080/v1/entry-tickets"))
                 .andExpect(method(HttpMethod.POST))
@@ -111,7 +117,7 @@ class StayTicketClientAdapterTest {
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN
-        UUID exitTicketId = stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId);
+        UUID exitTicketId = stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId, BigDecimal.TEN);
 
         // THEN
         assertEquals(expectedExitTicketId, exitTicketId);
@@ -130,7 +136,7 @@ class StayTicketClientAdapterTest {
 
         // WHEN & THEN
         assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId)
+            stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId, BigDecimal.TEN)
         );
 
         server.verify();
@@ -145,7 +151,7 @@ class StayTicketClientAdapterTest {
 
         // WHEN & THEN: no debe colarse la RestClientException cruda
         TicketServiceException ex = assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID())
+            stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID(), BigDecimal.TEN)
         );
         assertThat(ex.getCause()).isNotNull();
         server.verify();
