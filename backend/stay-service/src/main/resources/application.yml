@@ -1,0 +1,110 @@
+# RES-02 - Resilience4j: circuit breaker por servicio destino.
+#
+# Por que este fichero es .yml y el resto de la config sigue en
+# application.properties: la config de Resilience4j es fuertemente anidada
+# (configs -> instancias -> listas de excepciones) y en formato properties
+# queda ilegible. Spring Boot carga los dos ficheros del mismo directorio;
+# ante claves duplicadas gana application.properties, y aqui no hay ninguna
+# duplicada (este fichero solo define claves resilience4j.*).
+#
+# stay-service es el unico microservicio con llamadas salientes, asi que es
+# el unico que necesita esta configuracion.
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      # "default" es un nombre reservado del starter: define la base comun.
+      # Cada instancia lo referencia con base-config y solo sobreescribe lo
+      # que la diferencia del resto.
+      default:
+        # COUNT_BASED: la ventana cuenta las ultimas N llamadas, no los
+        # ultimos N segundos. Con trafico irregular (un parking de noche
+        # puede pasar minutos sin un check-in) una ventana temporal se
+        # vaciaria sola y el circuito nunca llegaria a abrirse.
+        sliding-window-type: COUNT_BASED
+
+        # Llamadas de prueba que se dejan pasar en HALF_OPEN antes de decidir
+        # si se vuelve a CLOSED o a OPEN.
+        permitted-number-of-calls-in-half-open-state: 3
+
+        # Sin esto el paso de OPEN a HALF_OPEN solo ocurre cuando llega una
+        # llamada nueva: si nadie llama, el circuito se queda abierto para
+        # siempre aunque el servicio destino ya se haya recuperado.
+        automatic-transition-from-open-to-half-open-enabled: true
+
+        # Expone el estado del circuito en /actuator/health.
+        register-health-indicator: true
+
+        # Explicito aunque sea el valor por defecto: un circuito abierto
+        # describe un problema del servicio destino, no de stay-service. Con
+        # true, ticket-service caido pondria /actuator/health en DOWN y
+        # Kubernetes reiniciaria stay-service, que es justo lo contrario de
+        # lo que buscamos con un circuit breaker.
+        allow-health-indicator-to-fail: false
+
+        # Tamano del buffer de eventos que sirve
+        # /actuator/circuitbreakerevents (util en la demo para ensenar las
+        # transiciones CLOSED -> OPEN -> HALF_OPEN en vivo).
+        event-consumer-buffer-size: 20
+
+    instances:
+      # --------------------------------------------------------------------
+      # Una instancia por servicio destino. Instancias separadas = el estado
+      # de un circuito no contamina a los demas: que ticket-service este
+      # caido no debe impedir que stay-service hable con spot-service.
+      #
+      # Los nombres coinciden con los que consumira @CircuitBreaker(name=...)
+      # en los adaptadores de salida.
+      # --------------------------------------------------------------------
+
+      # vehicle-service: ruta critica de check-in (verificar/dar de alta el
+      # vehiculo). Abrir el circuito aqui significa rechazar entradas, asi
+      # que se exige mas evidencia (ventana grande) antes de abrir y se
+      # reintenta pronto.
+      vehicleService:
+        base-config: default
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        # Solo cuentan como fallo los errores de infraestructura. Todo lo
+        # que no este en esta lista se contabiliza como llamada correcta.
+        record-exceptions:
+          - com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException
+
+      # spot-service: ruta critica de check-in (buscar y ocupar plaza) y de
+      # check-out (liberar). Mismo perfil que vehicle-service.
+      spotService:
+        base-config: default
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        record-exceptions:
+          - com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException
+
+      # tariff-service: solo interviene en check-out, con menos volumen de
+      # llamadas, de ahi la ventana mas pequena. La espera es mas larga
+      # porque la tarifa vigente cambia poco: martillear el servicio mientras
+      # se recupera no aporta nada.
+      tariffService:
+        base-config: default
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        record-exceptions:
+          - com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException
+
+      # ticket-service: servicio secundario (emitir el ticket no bloquea la
+      # entrada ni la salida). Aqui interesa lo contrario que en la ruta
+      # critica: abrir antes (umbral mas bajo) para cortar rapido y no
+      # arrastrar la latencia del check-in, y quedarse abierto mas tiempo.
+      ticketService:
+        base-config: default
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 40
+        wait-duration-in-open-state: 30s
+        record-exceptions:
+          - com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException
