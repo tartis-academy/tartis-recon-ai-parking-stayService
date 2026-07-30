@@ -71,7 +71,7 @@ public class CheckOutUseCase {
 
         UUID exitTicketId;
         try {
-            exitTicketId = ticketPort.issueExitTicket(saved.getId(), command.getEntryTicketId());
+            exitTicketId = ticketPort.issueExitTicket(saved.getId(), command.getEntryTicketId(), amount);
         } finally {
             // La plaza debe liberarse aunque falle la emision del ticket: la
             // estancia ya quedo FINISHED (inmutable) y no debe quedar bloqueada.

@@ -90,7 +90,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(inProgressStay()));
         when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ticketPort.issueExitTicket(eq(stayId), any())).thenReturn(exitTicketId);
+        when(ticketPort.issueExitTicket(eq(stayId), any(), any(BigDecimal.class))).thenReturn(exitTicketId);
 
         CheckOutResultDTO result = useCase.execute(new StayCheckOutDTO(PLATE, null));
 
@@ -100,7 +100,7 @@ class CheckOutUseCaseTest {
         assertEquals(exitTicketId, result.getExitTicketId());
         assertEquals(90L, result.getTotalMinutes());
         verify(spotPort).releaseSpot(spotId);
-        verify(ticketPort).issueExitTicket(stayId, null);
+        verify(ticketPort).issueExitTicket(eq(stayId), eq(null), any(BigDecimal.class));
     }
 
     @Test
@@ -138,7 +138,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(inProgressStay()));
         when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ticketPort.issueExitTicket(eq(stayId), any()))
+        when(ticketPort.issueExitTicket(eq(stayId), any(), any(BigDecimal.class)))
                 .thenThrow(new IllegalStateException("ticket-service no disponible"));
 
         assertThrows(IllegalStateException.class,
@@ -174,7 +174,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(inProgressStay()));
         when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ticketPort.issueExitTicket(eq(stayId), any())).thenReturn(UUID.randomUUID());
+        when(ticketPort.issueExitTicket(eq(stayId), any(), any(BigDecimal.class))).thenReturn(UUID.randomUUID());
         org.mockito.Mockito.doThrow(new IllegalStateException("spot-service no disponible"))
                 .when(spotPort).releaseSpot(spotId);
 
