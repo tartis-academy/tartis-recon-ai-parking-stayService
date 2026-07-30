@@ -62,14 +62,13 @@ public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issue
     public UUID issueExitTicket(UUID stayId, UUID entryTicketId, BigDecimal totalAmount) {
         // TicketRequest de ticket-service (POST /v1/tickets) solo acepta stayId y totalAmount;
         // entryTicketId no forma parte de su contrato todavia.
+        record ExitTicketRequest(String stayId, BigDecimal totalAmount) {}
+        
         Map<?, ?> response;
         try {
             response = restClient.post()
                     .uri("/v1/tickets")
-                    .body(Map.of(
-                            "stayId", stayId.toString(),
-                            "totalAmount", totalAmount
-                    ))
+                    .body(new ExitTicketRequest(stayId.toString(), totalAmount))
                     .retrieve()
                     .body(Map.class);
         } catch (RestClientException e) {
