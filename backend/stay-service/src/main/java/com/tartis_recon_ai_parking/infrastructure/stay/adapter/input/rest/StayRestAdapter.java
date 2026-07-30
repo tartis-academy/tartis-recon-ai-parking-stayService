@@ -19,6 +19,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.re
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -85,6 +86,7 @@ public class StayRestAdapter {
     /** Detalle de una estancia (HU-08). 404 si no existe. */
     @GetMapping("/{stayId}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'OPERARIO')")
+    @PostAuthorize("hasAnyRole('ADMIN', 'OPERARIO') or (hasRole('USER') and returnObject.body.plate == authentication.name)")
     public ResponseEntity<StayResponse> getStay(@PathVariable UUID stayId) {
         StayDTO stay = getStayUseCase.execute(stayId);
         return ResponseEntity.ok(mapper.toStayResponse(stay));

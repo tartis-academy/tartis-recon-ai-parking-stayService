@@ -311,14 +311,28 @@ class StayRestAdapterMvcTest {
     }
 
     @Test
-    @DisplayName("USER: Debe permitir consultar una estancia por ID (200)")
+    @DisplayName("USER: Debe permitir consultar una estancia por ID (200) si es su vehiculo")
     void shouldAllowGetStayForUser() throws Exception {
         UUID stayId = UUID.randomUUID();
-        when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS));
+        String plate = "1234ABC";
+        when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS, plate));
 
         mockMvc.perform(get("/v1/stays/{stayId}", stayId)
-                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                        .with(jwt().jwt(j -> j.claim("sub", plate)).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("USER: Debe denegar consultar una estancia por ID (403) si no es su vehiculo (IDOR)")
+    void shouldDenyGetStayForUserWhenNotOwner() throws Exception {
+        UUID stayId = UUID.randomUUID();
+        String stayPlate = "1234ABC";
+        String userPlate = "5678XYZ";
+        when(getStayUseCase.execute(stayId)).thenReturn(new StayDTO(stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS, stayPlate));
+
+        mockMvc.perform(get("/v1/stays/{stayId}", stayId)
+                        .with(jwt().jwt(j -> j.claim("sub", userPlate)).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
+                .andExpect(status().isForbidden());
     }
 
     @Test

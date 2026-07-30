@@ -114,4 +114,11 @@ class ActiveStayRestAdapterMvcTest {
                 .andExpect(status().isForbidden());
         verify(getActiveStayUseCase, never()).execute(any());
     }
+
+    @Test
+    @DisplayName("Debe rechazar con 401 una peticion sin token")
+    void shouldReturn401WhenNoTokenProvided() throws Exception {
+        mockMvc.perform(get("/v1/activeStay/" + UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+    }
 }
