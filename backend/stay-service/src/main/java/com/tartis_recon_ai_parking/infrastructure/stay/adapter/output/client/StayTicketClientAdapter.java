@@ -25,9 +25,22 @@ public class StayTicketClientAdapter implements StayTicketPort {
         this.restClient = builder.baseUrl(ticketServiceUrl).build();
     }
 
+    /**
+     * Espejo de EntryTicketResponse de ticket-service (id, stayId, issuedAt, code).
+     *
+     * <p>No se deserializa directamente a {@link EntryTicketInfo}: sus componentes
+     * se llaman ticketId/barCode, y los de ticket-service id/code. Jackson no falla
+     * por eso (ignora lo que no reconoce y deja null lo que no encuentra), asi que
+     * antes de este fix el check-in devolvia 201 con entryTicket.ticketId y
+     * entryTicket.barCode siempre a null, en silencio, con el ticket ya creado de
+     * verdad en la BD de ticket-service. Se detecto probando el flujo end-to-end
+     * contra release, no por revision de codigo.
+     */
+    private record EntryTicketResponse(UUID id, UUID stayId, Instant issuedAt, String code) {}
+
     @Override
 public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issuedAt) {
-    EntryTicketInfo response;
+    EntryTicketResponse response;
     try {
         response = restClient.post()
                 .uri("/v1/entry-tickets") // La raíz del recurso sin añadir /entry
@@ -37,7 +50,7 @@ public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issue
                         "issuedAt", issuedAt.toString()
                 ))
                 .retrieve()
-                .body(EntryTicketInfo.class);
+                .body(EntryTicketResponse.class);
     } catch (RestClientException e) {
         // ticket-service caido, timeout, 5xx... se traduce para que el frontend
         // reciba un ErrorResponse interpretable en vez de una excepcion de red
@@ -55,7 +68,7 @@ public EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant issue
                 "ticket-service no devolvió el ticket de entrada para la estancia " + stayId);
     }
 
-    return response;
+    return new EntryTicketInfo(response.id(), response.code(), response.issuedAt());
 }
 
     @Override
