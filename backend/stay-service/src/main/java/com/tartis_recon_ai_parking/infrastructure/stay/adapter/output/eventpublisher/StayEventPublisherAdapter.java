@@ -3,9 +3,12 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.eventpubl
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayEventPublisher;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+// Se activa SOLO si parking.async.enabled es true (o si la propiedad no está definida)
+@ConditionalOnProperty(name = "parking.async.enabled", havingValue = "true", matchIfMissing = true)
 public class StayEventPublisherAdapter implements StayEventPublisher {
 
     private final RabbitTemplate rabbitTemplate;

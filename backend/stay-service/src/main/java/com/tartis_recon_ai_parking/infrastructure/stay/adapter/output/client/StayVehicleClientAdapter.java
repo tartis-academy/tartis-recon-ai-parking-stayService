@@ -7,6 +7,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.VehicleResponse;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -57,10 +58,7 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
             // invalido del propio check-in, no un fallo de vehicle-service. Sin
             // esto, una matricula mal escrita en el totem se traducia como "503
             // servicio no disponible" en vez de "400 matricula invalida".
-            throw new InvalidStayException(
-                    "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
-                            + creationRejected.getStatusCode() + ")",
-                    creationRejected);
+            throw translateClientError(creationRejected, plate);
         } catch (RestClientException creationFailure) {
             throw new VehicleServiceException(
                     "No se pudo contactar con vehicle-service para dar de alta el vehiculo " + plate,
@@ -69,10 +67,7 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
     } catch (HttpClientErrorException e) {
         // Mismo caso que arriba pero en la propia consulta (algunos vehicle-service
         // validan el formato tambien en el GET, antes de responder 404/200).
-        throw new InvalidStayException(
-                "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
-                        + e.getStatusCode() + ")",
-                e);
+        throw translateClientError(e, plate);
     } catch (RestClientException e) {
         // vehicle-service caido, timeout, 5xx... no confundir con el 404/4xx de
         // arriba (esos son negocio); se traduce para que el frontend reciba un
@@ -98,14 +93,44 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
         } catch (HttpClientErrorException e) {
             // Matricula con formato invalido: dato de entrada erroneo, no un
             // fallo de vehicle-service (mismo caso que en getOrCreateVehicle).
-            throw new InvalidStayException(
-                    "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
-                            + e.getStatusCode() + ")",
-                    e);
+            throw translateClientError(e, plate);
         } catch (RestClientException e) {
             throw new VehicleServiceException(
                     "No se pudo contactar con vehicle-service para consultar el vehiculo " + plate, e);
         }
+    }
+
+    /**
+     * Un 401/403 de vehicle-service no es una matricula mal escrita: es que
+     * stay-service no se ha autenticado bien contra el (token de servicio
+     * ausente, caducado, o sin el rol que exige el endpoint).
+     *
+     * <p>Antes caia en el mismo saco que el 400 de formato, asi que un fallo de
+     * autenticacion llegaba al totem como <em>"La matricula '1234BCD' no es
+     * valida"</em>. En la prueba E2E del 30/07 eso mando el diagnostico en la
+     * direccion contraria durante un buen rato: se buscaba un problema de
+     * validacion de matriculas cuando lo que pasaba era que stay no mandaba
+     * ninguna cabecera Authorization.
+     *
+     * <p>Se separa para que salga como 503 (igual que el resto de fallos de
+     * integracion, IN-36) y con un mensaje que apunta a la causa real.
+     */
+    private static RuntimeException translateClientError(HttpClientErrorException e, String plate) {
+        int status = e.getStatusCode().value();
+
+        if (status == HttpStatus.UNAUTHORIZED.value() || status == HttpStatus.FORBIDDEN.value()) {
+            return new VehicleServiceException(
+                    "vehicle-service rechazo las credenciales de stay-service (" + e.getStatusCode()
+                            + "). No es un problema de la matricula '" + plate
+                            + "': revisar el token de servicio (STAY_CLIENT_ID/STAY_CLIENT_SECRET)"
+                            + " y los roles de su cuenta de servicio.",
+                    e);
+        }
+
+        return new InvalidStayException(
+                "La matricula '" + plate + "' no es valida: vehicle-service la rechazo ("
+                        + e.getStatusCode() + ")",
+                e);
     }
 
     /**

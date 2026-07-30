@@ -57,7 +57,12 @@ class StaySpotClientAdapterTest {
 
     server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
             .andExpect(method(HttpMethod.POST))
-            .andExpect(jsonPath("$.vehicleType").value("CAR"))
+            // "type", no "vehicleType": es el unico campo que declara
+            // SpotRequest de spot-service. Este test afirmaba el nombre
+            // equivocado, asi que fijaba el bug en vez de detectarlo: spot
+            // recibia type=null y respondia "No hay plazas para el tipo null"
+            // teniendo plazas AVAILABLE.
+            .andExpect(jsonPath("$.type").value("CAR"))
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
