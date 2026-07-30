@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 
 import java.util.concurrent.TimeUnit;
 
@@ -107,5 +109,45 @@ class CircuitBreakerBehaviourTest {
                 .isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(circuitBreakerRegistry.circuitBreaker("ticketService").getState())
                 .isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    /**
+     * RES-03: vehicleService abre el circuito al alcanzar el umbral de fallos (10 fallos).
+     */
+    @Test
+    void shouldOpenVehicleServiceAfterReachingFailureThreshold() {
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("vehicleService");
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // 9 fallos: no alcanza el minimo de llamadas (10)
+        for (int i = 0; i < 9; i++) {
+            circuitBreaker.onError(0, TimeUnit.MILLISECONDS,
+                    new VehicleServiceException("vehicle-service no responde"));
+        }
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // El decimo fallo abre el circuito
+        circuitBreaker.onError(0, TimeUnit.MILLISECONDS,
+                new VehicleServiceException("vehicle-service no responde"));
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+        assertThat(circuitBreaker.tryAcquirePermission()).isFalse();
+    }
+
+    /**
+     * RES-03: Una matricula invalida (InvalidStayException) es un fallo de cliente (400),
+     * no un fallo del servicio, por lo que el circuito debe permanecer CERRADO.
+     */
+    @Test
+    void shouldStayClosedWhenVehicleServiceReceivesInvalidStayException() {
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("vehicleService");
+
+        for (int i = 0; i < 30; i++) {
+            circuitBreaker.onError(0, TimeUnit.MILLISECONDS,
+                    new InvalidStayException("matricula invalida"));
+        }
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(circuitBreaker.tryAcquirePermission()).isTrue();
     }
 }
