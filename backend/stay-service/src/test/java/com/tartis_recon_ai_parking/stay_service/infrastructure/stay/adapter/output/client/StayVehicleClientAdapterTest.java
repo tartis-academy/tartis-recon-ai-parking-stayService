@@ -347,4 +347,73 @@ void shouldFallbackToRequestedPlateWhenResponsePlateMissing() {
     assertEquals("1234ABC", vehicleInfo.plate());
     server.verify();
 }
+
+// --- Separacion 401/403 vs resto de 4xx (translateClientError) ---
+//
+// Un rechazo de credenciales NO es una matricula invalida. Antes los dos
+// caian en el mismo saco y un 401 llegaba al totem como "La matricula no es
+// valida", lo que mandaba el diagnostico en la direccion contraria.
+
+@Test
+void shouldThrowVehicleServiceException_whenLookupUnauthorized() {
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(401));
+
+    VehicleServiceException ex = assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+
+    assertThat(ex.getMessage()).contains("credenciales");
+    server.verify();
+}
+
+@Test
+void shouldThrowVehicleServiceException_whenLookupForbidden() {
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(403));
+
+    assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+    server.verify();
+}
+
+@Test
+void shouldThrowVehicleServiceException_whenCreateUnauthorized() {
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withRawStatus(401));
+
+    assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+    server.verify();
+}
+
+@Test
+void shouldStillThrowInvalidStay_whenPlateRejectedWith400() {
+    // El 400 de formato sigue siendo un error del dato, no de credenciales.
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/MAL"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(400));
+
+    InvalidStayException ex = assertThrows(InvalidStayException.class,
+            () -> stayVehicleClientAdapter.findByPlate("MAL"));
+
+    assertThat(ex.getMessage()).contains("no es valida");
+    server.verify();
+}
+
+@Test
+void shouldThrowVehicleServiceException_whenFindByPlateUnauthorized() {
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(401));
+
+    assertThrows(VehicleServiceException.class,
+            () -> stayVehicleClientAdapter.findByPlate("1234ABC"));
+    server.verify();
+}
 }
