@@ -2,11 +2,11 @@ package com.tartis_recon_ai_parking.application.stay.usecase;
 
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
-import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
-import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort.VehicleInfo;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -31,9 +32,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -52,9 +54,7 @@ class CheckOutUseCaseTest {
     @Mock
     private StayTariffPort tariffPort;
     @Mock
-    private StaySpotPort spotPort;
-    @Mock
-    private StayTicketPort ticketPort;
+    private StayEventPublisher eventPublisher;
 
     private CheckOutUseCase useCase;
 
@@ -71,7 +71,7 @@ class CheckOutUseCaseTest {
         spotId = UUID.randomUUID();
         tariffId = UUID.randomUUID();
         checkIn = NOW.minus(90, ChronoUnit.MINUTES);
-        useCase = new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, spotPort, ticketPort,
+        useCase = new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, eventPublisher,
                 new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -81,26 +81,37 @@ class CheckOutUseCaseTest {
     }
 
     @Test
-    @DisplayName("Debe cerrar la estancia: calcula importe, finaliza, libera plaza y emite ticket de salida")
+    @DisplayName("Debe cerrar la estancia: calcula importe, finaliza y publica StayClosedEvent (ASY-03/ASY-04)")
     void shouldCheckOutActiveStay() {
-        UUID exitTicketId = UUID.randomUUID();
         when(vehiclePort.findByPlate(PLATE))
                 .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
         when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ticketPort.issueExitTicket(eq(stayId), any(), any(BigDecimal.class))).thenReturn(exitTicketId);
 
         CheckOutResultDTO result = useCase.execute(new StayCheckOutDTO(PLATE, null));
 
         assertEquals(StayStatus.FINISHED, result.getStay().getStatus());
         assertEquals(0, result.getStay().getTotalAmount().compareTo(new BigDecimal("3.00")));
         assertEquals(NOW, result.getStay().getCheckOut());
-        assertEquals(exitTicketId, result.getExitTicketId());
+        // El ticket ya no se conoce al responder: se genera de forma
+        // asincrona al consumir el evento (ASY-04).
+        assertNull(result.getExitTicketId());
         assertEquals(90L, result.getTotalMinutes());
-        verify(spotPort).releaseSpot(spotId);
-        verify(ticketPort).issueExitTicket(eq(stayId), eq(null), any(BigDecimal.class));
+
+        ArgumentCaptor<StayClosedEvent> eventCaptor = ArgumentCaptor.forClass(StayClosedEvent.class);
+        verify(eventPublisher).publish(eventCaptor.capture());
+        StayClosedEvent published = eventCaptor.getValue();
+
+        assertEquals("StayClosedEvent", published.type());
+        assertEquals("v1", published.version());
+        assertEquals(stayId, published.data().stayId());
+        assertEquals(spotId, published.data().spotId());
+        assertEquals(PLATE, published.data().plate());
+        assertEquals(checkIn, published.data().entryDate());
+        assertEquals(NOW, published.data().exitDate());
+        assertEquals(0, published.data().totalAmount().compareTo(new BigDecimal("3.00")));
     }
 
     @Test
@@ -115,7 +126,7 @@ class CheckOutUseCaseTest {
                 () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
 
         verify(stayPersistence, never()).save(any());
-        verifyNoInteractions(spotPort, ticketPort);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -126,25 +137,7 @@ class CheckOutUseCaseTest {
         assertThrows(StayNotFoundException.class,
                 () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
 
-        verifyNoInteractions(stayPersistence, tariffPort, spotPort, ticketPort);
-    }
-
-    @Test
-    @DisplayName("Debe liberar la plaza aunque falle la emision del ticket de salida")
-    void shouldReleaseSpotEvenWhenTicketIssuanceFails() {
-        when(vehiclePort.findByPlate(PLATE))
-                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
-        when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(inProgressStay()));
-        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
-        when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ticketPort.issueExitTicket(eq(stayId), any(), any(BigDecimal.class)))
-                .thenThrow(new IllegalStateException("ticket-service no disponible"));
-
-        assertThrows(IllegalStateException.class,
-                () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
-
-        verify(spotPort).releaseSpot(spotId);
+        verifyNoInteractions(stayPersistence, tariffPort, eventPublisher);
     }
 
     @Test
@@ -153,7 +146,7 @@ class CheckOutUseCaseTest {
         assertThrows(InvalidStayException.class,
                 () -> useCase.execute(new StayCheckOutDTO("   ", null)));
 
-        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, spotPort, ticketPort);
+        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, eventPublisher);
     }
 
     @Test
@@ -162,25 +155,24 @@ class CheckOutUseCaseTest {
         assertThrows(InvalidStayException.class,
                 () -> useCase.execute(new StayCheckOutDTO(null, null)));
 
-        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, spotPort, ticketPort);
+        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, eventPublisher);
     }
 
     @Test
-    @DisplayName("IN-25: si liberar la plaza falla tras el check-out, se registra pero no se propaga (requiere liberacion manual)")
-    void shouldSwallowSpotReleaseFailureAfterCheckOut() {
+    @DisplayName("Si publicar StayClosedEvent falla, se registra pero no se propaga: el check-out ya es valido (requiere revision manual)")
+    void shouldSwallowEventPublishFailure() {
         when(vehiclePort.findByPlate(PLATE))
                 .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
         when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(ticketPort.issueExitTicket(eq(stayId), any(), any(BigDecimal.class))).thenReturn(UUID.randomUUID());
-        org.mockito.Mockito.doThrow(new IllegalStateException("spot-service no disponible"))
-                .when(spotPort).releaseSpot(spotId);
+        doThrow(new IllegalStateException("rabbitmq no disponible"))
+                .when(eventPublisher).publish(any(StayClosedEvent.class));
 
         CheckOutResultDTO result = useCase.execute(new StayCheckOutDTO(PLATE, null));
 
         assertEquals(StayStatus.FINISHED, result.getStay().getStatus());
-        verify(spotPort).releaseSpot(spotId);
+        verify(eventPublisher).publish(any(StayClosedEvent.class));
     }
 }

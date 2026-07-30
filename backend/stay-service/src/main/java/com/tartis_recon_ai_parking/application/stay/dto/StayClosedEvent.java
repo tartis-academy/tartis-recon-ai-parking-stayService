@@ -6,37 +6,29 @@ import java.util.UUID;
 
 public record StayClosedEvent(
     UUID eventId,
-    String eventType,
+    String type,
     String version,
-    Instant timestamp,
+    Instant occurredAt,
     StayClosedData data
 ) {
     public record StayClosedData(
         UUID stayId,
+        UUID spotId,
         String plate,
-        String spotCode,
         Instant entryDate,
         Instant exitDate,
         BigDecimal totalAmount
     ) {}
 
-    /**
-     * Factoría para construir el evento con los metadatos requeridos por el contrato (v1).
-     */
-    public static StayClosedEvent create(
-            UUID stayId,
-            String plate,
-            String spotCode,
-            Instant entryDate,
-            Instant exitDate,
-            BigDecimal totalAmount) {
-
+    public static StayClosedEvent of(UUID stayId, UUID spotId, String plate,
+                                      Instant entryDate, Instant exitDate,
+                                      BigDecimal totalAmount, Instant occurredAt) {
         return new StayClosedEvent(
             UUID.randomUUID(),
             "StayClosedEvent",
             "v1",
-            Instant.now(),
-            new StayClosedData(stayId, plate, spotCode, entryDate, exitDate, totalAmount)
+            occurredAt,
+            new StayClosedData(stayId, spotId, plate, entryDate, exitDate, totalAmount)
         );
     }
 }
