@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -136,6 +137,49 @@ class BeanConfigurationCorrelationTest {
         assertNotNull(sent.get(), "sin MDC tambien tiene que salir cabecera: una traza parcial vale mas que ninguna");
         assertDoesNotThrow(() -> UUID.fromString(sent.get()),
                 "el identificador generado debe ser un UUID, igual que el que genera CorrelationIdFilter");
+    }
+
+    @Test
+    @DisplayName("Debe propagar la identidad de origen en X-Origin-User")
+    void shouldPropagateOriginUser() {
+        MDC.put(CorrelationIdFilter.CORRELATION_ID_MDC_KEY, "abc-123");
+        MDC.put(RequestIdentityFilter.USER_NAME_MDC_KEY, "operario.test");
+
+        server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+                // stay llama con su propio token de client_credentials, asi que
+                // vehicle ve azp=parking-stay-service. Sin esta cabecera pierde
+                // por completo que operario origino la operacion.
+                .andExpect(header(BeanConfiguration.ORIGIN_USER_HEADER, "operario.test"))
+                .andRespond(withSuccess());
+
+        restClient.get()
+                .uri("http://vehicle-service:8080/v1/vehicles")
+                .retrieve()
+                .toBodilessEntity();
+
+        server.verify();
+    }
+
+    /**
+     * Caso real: los consumidores de RabbitMQ y las tareas internas no tienen
+     * usuario detras. Mandar la cabecera vacia seria peor que no mandarla,
+     * porque el servicio destino la registraria como si fuera un usuario.
+     */
+    @Test
+    @DisplayName("No debe mandar X-Origin-User si no hay usuario en el MDC")
+    void shouldOmitOriginUserWhenAbsent() {
+        server.expect(requestTo("http://spot-service:8080/v1/spots/occupy"))
+                .andExpect(request -> assertNull(
+                        request.getHeaders().getFirst(BeanConfiguration.ORIGIN_USER_HEADER),
+                        "sin usuario la cabecera no debe existir, ni siquiera vacia"))
+                .andRespond(withSuccess());
+
+        restClient.post()
+                .uri("http://spot-service:8080/v1/spots/occupy")
+                .retrieve()
+                .toBodilessEntity();
+
+        server.verify();
     }
 
     @Test

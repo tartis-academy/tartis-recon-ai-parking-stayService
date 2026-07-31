@@ -42,6 +42,14 @@ public class BeanConfiguration {
     private static final String REGISTRATION_ID = "parking-stay";
 
     /**
+     * GW-06: usuario que origino la cadena, para que los servicios destino
+     * puedan escribir "esto lo pidio operario.test" en vez de "esto lo pidio
+     * parking-stay-service". Contexto de log, nunca credencial: ver
+     * {@link #tracingContextInterceptor()}.
+     */
+    public static final String ORIGIN_USER_HEADER = "X-Origin-User";
+
+    /**
      * stay-service es el unico microservicio que llama a otros por HTTP
      * (vehicle, spot, tariff y ticket) y esas cuatro APIs exigen JWT. Como no
      * mandaba ninguna cabecera Authorization, las cuatro respondian 401 y el
@@ -96,7 +104,7 @@ public class BeanConfiguration {
                 // falla, el ServiceTokenException se lanza antes y no llegamos
                 // a mandar cabecera de correlacion a un sitio al que no vamos
                 // a llamar.
-                .requestInterceptor(correlationIdInterceptor());
+                .requestInterceptor(tracingContextInterceptor());
     }
 
     /**
@@ -130,11 +138,32 @@ public class BeanConfiguration {
      * ninguna. Cuando la correlacion cruce AMQP (propiedad estandar
      * {@code correlationId} del mensaje) este caso deberia dejar de darse.
      *
-     * <p>No se escribe el identificador en el MDC desde aqui: este interceptor
-     * solo lee. Poner la clave aqui significaria tener que limpiarla, y el
-     * dueno del ciclo de vida del MDC es el filtro, no el cliente HTTP.
+     * <p>No se escribe nada en el MDC desde aqui: este interceptor solo lee.
+     * Poner claves aqui significaria tener que limpiarlas, y el dueno del ciclo
+     * de vida del MDC son los filtros, no el cliente HTTP.
+     *
+     * <p>Ademas del correlation-id propaga la <strong>identidad de origen</strong>
+     * en {@code X-Origin-User}, por un motivo especifico de stay: este servicio
+     * pide su propio token con {@code client_credentials} y NO reenvia el del
+     * usuario (decision razonada arriba, en {@link #authorizedClientManager}).
+     * El efecto colateral es que vehicle, spot, tariff y ticket ven siempre
+     * {@code azp=parking-stay-service} y pierden por completo que operario
+     * origino la operacion. Sin esta cabecera, el criterio "quien llama a que"
+     * quedaria cubierto solo en el primer salto.
+     *
+     * <p><strong>{@code X-Origin-User} NO es una credencial y no debe usarse
+     * para autorizar nada.</strong> La autorizacion de estas llamadas la da el
+     * bearer de {@code client_credentials} que puso el interceptor anterior.
+     * Esto es contexto de log y nada mas: llega desde otro servicio y no va
+     * firmada. Si alguien escribe algun dia un {@code @PreAuthorize} que lea
+     * esta cabecera, es un fallo de seguridad.
+     *
+     * <p>Alternativa descartada por coste: meter el {@code preferred_username}
+     * original como claim del token de servicio via token exchange en Keycloak.
+     * Es mas limpio conceptualmente y bastante mas caro de montar; para el
+     * alcance de GW-06 la cabecera basta.
      */
-    private ClientHttpRequestInterceptor correlationIdInterceptor() {
+    private ClientHttpRequestInterceptor tracingContextInterceptor() {
         return (request, body, execution) -> {
             String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_MDC_KEY);
 
@@ -143,6 +172,12 @@ public class BeanConfiguration {
             }
 
             request.getHeaders().set(CorrelationIdFilter.CORRELATION_ID_HEADER, correlationId);
+
+            String originUser = MDC.get(RequestIdentityFilter.USER_NAME_MDC_KEY);
+            if (originUser != null && !originUser.isBlank()) {
+                request.getHeaders().set(ORIGIN_USER_HEADER, originUser);
+            }
+
             return execution.execute(request, body);
         };
     }
