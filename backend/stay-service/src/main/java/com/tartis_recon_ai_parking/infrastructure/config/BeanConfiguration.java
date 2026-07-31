@@ -1,7 +1,9 @@
 package com.tartis_recon_ai_parking.infrastructure.config;
 
 import java.time.Duration;
+import java.util.UUID;
 
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -88,7 +90,61 @@ public class BeanConfiguration {
         // manana aparece una quinta, queda cubierta sin tocar nada.
         return RestClient.builder()
                 .requestFactory(requestFactory)
-                .requestInterceptor(bearerTokenInterceptor(authorizedClientManager));
+                .requestInterceptor(bearerTokenInterceptor(authorizedClientManager))
+                // GW-06: sin esto la cadena de trazas se corta en el primer
+                // salto. Va DESPUES del de token a proposito: si Keycloak
+                // falla, el ServiceTokenException se lanza antes y no llegamos
+                // a mandar cabecera de correlacion a un sitio al que no vamos
+                // a llamar.
+                .requestInterceptor(correlationIdInterceptor());
+    }
+
+    /**
+     * GW-06 - propaga el correlation-id de esta peticion a los microservicios
+     * destino.
+     *
+     * <p>stay-service es el unico de los cinco con llamadas salientes, asi que
+     * es el unico sitio donde hace falta este interceptor y tambien el unico
+     * donde su ausencia se nota: sin el, un check-in genera cinco lineas de
+     * traza con cinco identificadores distintos, porque vehicle, spot, tariff
+     * y ticket no reciben cabecera y cada uno genera el suyo
+     * ({@link CorrelationIdFilter} hace exactamente eso cuando no le llega).
+     *
+     * <p>Lee del MDC, que es donde lo dejo {@link CorrelationIdFilter}. El MDC
+     * de SLF4J es ThreadLocal y las llamadas salientes de stay son sincronas
+     * (RestClient bloqueante sobre el hilo del servlet), asi que el valor esta
+     * disponible aqui sin necesidad de pasarlo por parametro por toda la
+     * aplicacion.
+     *
+     * <p><strong>Cuidado si algun dia esto se vuelve asincrono</strong>
+     * ({@code @Async}, WebClient reactivo, CompletableFuture con otro
+     * executor): el MDC NO se hereda al cambiar de hilo y este interceptor
+     * empezaria a mandar un identificador nuevo en cada llamada, en silencio.
+     * En ese momento hay que envolver el executor con un TaskDecorator que
+     * copie el MDC.
+     *
+     * <p>El caso "no hay nada en el MDC" es real y esperado: los consumidores
+     * de RabbitMQ corren en hilos del listener container, no en un hilo de
+     * servlet, asi que ahi no hubo CorrelationIdFilter. Se genera uno nuevo en
+     * vez de mandar la cabecera vacia, porque una traza parcial vale mas que
+     * ninguna. Cuando la correlacion cruce AMQP (propiedad estandar
+     * {@code correlationId} del mensaje) este caso deberia dejar de darse.
+     *
+     * <p>No se escribe el identificador en el MDC desde aqui: este interceptor
+     * solo lee. Poner la clave aqui significaria tener que limpiarla, y el
+     * dueno del ciclo de vida del MDC es el filtro, no el cliente HTTP.
+     */
+    private ClientHttpRequestInterceptor correlationIdInterceptor() {
+        return (request, body, execution) -> {
+            String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_MDC_KEY);
+
+            if (correlationId == null || correlationId.isBlank()) {
+                correlationId = UUID.randomUUID().toString();
+            }
+
+            request.getHeaders().set(CorrelationIdFilter.CORRELATION_ID_HEADER, correlationId);
+            return execution.execute(request, body);
+        };
     }
 
     private ClientHttpRequestInterceptor bearerTokenInterceptor(OAuth2AuthorizedClientManager manager) {
