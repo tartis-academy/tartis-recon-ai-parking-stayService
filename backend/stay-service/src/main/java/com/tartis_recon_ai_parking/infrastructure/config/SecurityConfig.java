@@ -27,6 +27,7 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 public class SecurityConfig {
 
     @Bean
+    @SuppressWarnings({"java:S112", "java:S1130"}) // Spring Security HttpSecurity.build() declares throws Exception
     SecurityFilterChain filterChain(HttpSecurity http,
                                     @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) throws Exception {
         http
