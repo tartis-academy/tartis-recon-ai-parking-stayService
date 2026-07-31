@@ -102,10 +102,13 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         } finally {
             // En el finally, no despues del doFilter: si la cadena lanza, la
             // peticion tambien tiene que dejar linea. Es justo la que interesa.
-            log.info("user={} roles={} client={} method={} path={} status={} duration_ms={}",
+            log.info("user={} roles={} client={} origin={} method={} path={} status={} duration_ms={}",
                     mdcOrDefault(RequestIdentityFilter.USER_NAME_MDC_KEY, ANONYMOUS),
                     mdcOrDefault(RequestIdentityFilter.ROLES_MDC_KEY, "-"),
                     mdcOrDefault(RequestIdentityFilter.CLIENT_ID_MDC_KEY, "-"),
+                    // Solo viene relleno cuando llama otro microservicio: es el
+                    // operario real detras de un token de client_credentials.
+                    mdcOrDefault(RequestIdentityFilter.ORIGIN_USER_MDC_KEY, "-"),
                     request.getMethod(),
                     // Path SIN query string. Ver el javadoc de la clase: no
                     // cambiar por getRequestURL() + getQueryString().

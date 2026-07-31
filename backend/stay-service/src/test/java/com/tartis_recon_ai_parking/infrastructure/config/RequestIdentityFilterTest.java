@@ -224,6 +224,96 @@ class RequestIdentityFilterTest {
     }
 
     @Test
+    @DisplayName("Debe recoger X-Origin-User cuando la llamada viene de otro microservicio")
+    void shouldReadOriginUserHeader() throws ServletException, IOException {
+        // Escenario real: stay llama a este servicio con su token de
+        // client_credentials, asi que azp es la cuenta de servicio y el operario
+        // que origino la operacion solo viaja en la cabecera.
+        authenticateWith(
+                jwt("sub-servicio", "service-account-parking-stay-service", "parking-stay-service"),
+                "ROLE_ADMIN");
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(RequestIdentityFilter.ORIGIN_USER_HEADER, "operario.test");
+
+        AtomicReference<String> originUser = new AtomicReference<>();
+
+        filter.doFilter(request, new MockHttpServletResponse(),
+                chainCapturing(Map.of(RequestIdentityFilter.ORIGIN_USER_MDC_KEY, originUser)));
+
+        assertEquals("operario.test", originUser.get());
+    }
+
+    @Test
+    @DisplayName("Debe guardar X-Origin-User en una clave distinta de userName, que si sale del token")
+    void shouldKeepOriginUserSeparateFromVerifiedIdentity() throws ServletException, IOException {
+        authenticateWith(
+                jwt("sub-servicio", "service-account-parking-stay-service", "parking-stay-service"),
+                "ROLE_ADMIN");
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(RequestIdentityFilter.ORIGIN_USER_HEADER, "operario.test");
+
+        AtomicReference<String> userName = new AtomicReference<>();
+        AtomicReference<String> originUser = new AtomicReference<>();
+
+        filter.doFilter(request, new MockHttpServletResponse(),
+                chainCapturing(Map.of(
+                        RequestIdentityFilter.USER_NAME_MDC_KEY, userName,
+                        RequestIdentityFilter.ORIGIN_USER_MDC_KEY, originUser)));
+
+        // userName es identidad verificada (sale del JWT); originUser es contexto
+        // que manda otro servicio y no va firmado. Mezclarlos haria creer que la
+        // segunda esta tan garantizada como la primera.
+        assertEquals("service-account-parking-stay-service", userName.get());
+        assertEquals("operario.test", originUser.get());
+    }
+
+    /**
+     * La cabecera llega de fuera y va directa a los logs. Sin validarla, un
+     * cliente podria colar saltos de linea y fabricar entradas de log falsas.
+     */
+    @Test
+    @DisplayName("Debe descartar un X-Origin-User con saltos de linea (log injection)")
+    void shouldRejectOriginUserWithControlCharacters() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(RequestIdentityFilter.ORIGIN_USER_HEADER,
+                "operario\n2026-07-31 ERROR linea de log falsa");
+
+        AtomicReference<String> originUser = new AtomicReference<>();
+
+        filter.doFilter(request, new MockHttpServletResponse(),
+                chainCapturing(Map.of(RequestIdentityFilter.ORIGIN_USER_MDC_KEY, originUser)));
+
+        assertNull(originUser.get());
+    }
+
+    @Test
+    @DisplayName("Debe descartar un X-Origin-User mas largo de 128 caracteres")
+    void shouldRejectOversizedOriginUser() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(RequestIdentityFilter.ORIGIN_USER_HEADER, "a".repeat(129));
+
+        AtomicReference<String> originUser = new AtomicReference<>();
+
+        filter.doFilter(request, new MockHttpServletResponse(),
+                chainCapturing(Map.of(RequestIdentityFilter.ORIGIN_USER_MDC_KEY, originUser)));
+
+        assertNull(originUser.get());
+    }
+
+    @Test
+    @DisplayName("Debe limpiar tambien originUser al terminar")
+    void shouldClearOriginUserAfterRequest() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(RequestIdentityFilter.ORIGIN_USER_HEADER, "operario.test");
+
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> { });
+
+        assertNull(MDC.get(RequestIdentityFilter.ORIGIN_USER_MDC_KEY));
+    }
+
+    @Test
     @DisplayName("Debe correr despues de la cadena de seguridad y antes del log de acceso")
     void shouldBeOrderedBetweenSecurityAndAccessLog() {
         // La cadena de Spring Security se registra en -100: cualquier valor por

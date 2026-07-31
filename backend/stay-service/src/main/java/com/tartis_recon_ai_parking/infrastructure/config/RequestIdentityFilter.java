@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -75,10 +76,28 @@ public class RequestIdentityFilter extends OncePerRequestFilter {
     public static final String USER_NAME_MDC_KEY = "userName";
     public static final String CLIENT_ID_MDC_KEY = "clientId";
     public static final String ROLES_MDC_KEY = "roles";
+    public static final String ORIGIN_USER_MDC_KEY = "originUser";
+
+    /**
+     * Usuario que origino la cadena, cuando quien llama es otro microservicio.
+     * La pone stay-service en sus llamadas salientes (ver
+     * {@code BeanConfiguration#tracingContextInterceptor}).
+     */
+    public static final String ORIGIN_USER_HEADER = "X-Origin-User";
 
     private static final String PREFERRED_USERNAME_CLAIM = "preferred_username";
     private static final String AUTHORIZED_PARTY_CLAIM = "azp";
     private static final String ROLE_PREFIX = "ROLE_";
+
+    /**
+     * {@link #ORIGIN_USER_HEADER} llega de fuera y va directa a los logs, asi
+     * que se valida antes de aceptarla: sin esto un cliente podria colar saltos
+     * de linea y fabricar entradas de log falsas (log injection / CRLF), o
+     * mandar una cadena enorme y engordar los ficheros. Mismo criterio que
+     * {@link CorrelationIdFilter}, ampliado con el punto y la arroba porque
+     * aqui viaja un {@code preferred_username} de Keycloak.
+     */
+    private static final Pattern SAFE_ORIGIN_USER = Pattern.compile("[A-Za-z0-9._@-]{1,128}");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -86,8 +105,10 @@ public class RequestIdentityFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         try {
             populateMdc();
+            populateOriginUser(request.getHeader(ORIGIN_USER_HEADER));
             filterChain.doFilter(request, response);
         } finally {
+            MDC.remove(ORIGIN_USER_MDC_KEY);
             // El hilo vuelve al pool: sin esto la siguiente peticion que lo
             // reutilice heredaria esta identidad y los logs mentirian sobre
             // quien hizo que. Se quitan solo estas claves, no MDC.clear(),
@@ -122,6 +143,32 @@ public class RequestIdentityFilter extends OncePerRequestFilter {
      * "OPERARIO,ADMIN" en dos lineas distintas, lo que rompe cualquier
      * agrupacion posterior sobre el campo.
      */
+    /**
+     * Recoge la identidad del usuario que origino la cadena cuando la llamada
+     * viene de otro microservicio.
+     *
+     * <p>Hace falta porque stay-service llama a los demas con su propio token
+     * de {@code client_credentials}: sin esta cabecera, vehicle, spot, tariff y
+     * ticket ven siempre {@code azp=parking-stay-service} y pierden por
+     * completo que operario origino la operacion, con lo que "quien llama a
+     * que" quedaria cubierto solo en el primer salto.
+     *
+     * <p><strong>Es contexto NO confiable.</strong> No va firmada y la manda
+     * otro servicio, asi que solo sirve para escribir logs. No debe usarse para
+     * autorizar nada: quien autoriza es el JWT. Se guarda en una clave del MDC
+     * distinta ({@code originUser}) precisamente para que no se confunda con
+     * {@code userName}, que si sale del token verificado.
+     *
+     * <p>Solo tiene sentido leerla cuando {@code clientId} es una cuenta de
+     * servicio. Si llega en una peticion de usuario normal, es ruido o un
+     * intento de despistar, y por eso el valor se sanea antes de registrarlo.
+     */
+    private static void populateOriginUser(String incoming) {
+        if (incoming != null && SAFE_ORIGIN_USER.matcher(incoming).matches()) {
+            MDC.put(ORIGIN_USER_MDC_KEY, incoming);
+        }
+    }
+
     private static String joinRoles(JwtAuthenticationToken jwtAuthentication) {
         return jwtAuthentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
