@@ -153,7 +153,7 @@ class RequestLoggingFilterTest {
     @Test
     @DisplayName("No debe registrar la ruta SSE: es una conexion de larga duracion")
     void shouldNotLogSseRoute() throws ServletException, IOException {
-        filter.doFilter(request("GET", "/v1/stays/events"),
+        filter.doFilter(request("GET", "/v1/events"),
                 new MockHttpServletResponse(), (req, res) -> { });
 
         assertTrue(appender.list.isEmpty(),
