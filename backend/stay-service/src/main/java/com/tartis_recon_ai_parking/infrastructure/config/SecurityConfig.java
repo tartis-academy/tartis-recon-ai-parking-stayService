@@ -39,6 +39,7 @@ public class SecurityConfig {
             .oauth2ResourceServer(oauth2 -> oauth2
                 .bearerTokenResolver(bearerTokenResolver())
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                .authenticationEntryPoint((request, response, ex) -> resolver.resolveException(request, response, null, ex))
             )
             .exceptionHandling(eh -> eh
                 .accessDeniedHandler((request, response, ex) -> resolver.resolveException(request, response, null, ex))
