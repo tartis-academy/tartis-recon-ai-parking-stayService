@@ -64,14 +64,16 @@ class EventStreamRestAdapterIntegrationMvcTest {
 
         assertEquals(before + 1, registry.activeCount());
 
-        registry.publish(StayClosedEvent.of(
+        StayClosedEvent event = StayClosedEvent.of(
                 UUID.randomUUID(), UUID.randomUUID(), "1234ABC",
                 Instant.now().minusSeconds(3600), Instant.now(),
-                new BigDecimal("5.00"), Instant.now()));
+                new BigDecimal("5.00"), Instant.now());
+        registry.publish(event);
 
         String body = result.getResponse().getContentAsString();
         assertTrue(body.contains("event:stay_updated"), body);
         assertTrue(body.contains("1234ABC"), body);
+        assertTrue(body.contains("id:" + event.eventId()), body);
     }
 
     private static JwtRequestPostProcessor adminJwt() {
