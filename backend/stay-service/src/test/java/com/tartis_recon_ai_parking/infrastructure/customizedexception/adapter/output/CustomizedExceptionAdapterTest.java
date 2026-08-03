@@ -7,6 +7,8 @@ import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -146,5 +148,24 @@ class CustomizedExceptionAdapterTest {
         assertEquals("No se pudo contactar con vehicle-service para consultar el vehiculo 1234ABC",
                 response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleCircuitOpen: circuito abierto (RES-05) devuelve 503, no 500")
+    void handleCircuitOpen_buildsServiceUnavailable() {
+        // Circuito real forzado a OPEN para obtener una CallNotPermittedException
+        // autentica, en vez de mockearla: es la misma excepcion que veria el
+        // check-out cuando el circuito de tariffService esta abierto.
+        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("tariffService");
+        circuitBreaker.transitionToOpenState();
+        CallNotPermittedException ex =
+                CallNotPermittedException.createCallNotPermittedException(circuitBreaker);
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleCircuitOpen(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("/v1/stays/check-out", response.getBody().path());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
     }
 }
