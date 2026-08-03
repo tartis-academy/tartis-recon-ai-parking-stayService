@@ -263,6 +263,34 @@ class CheckInUseCaseTest {
         verify(stayPersistence, never()).save(any());
     }
 
+    // ------------------------------------------------------------------
+    // Condiciones de carrera
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("doble check-in simultaneo: si la BD rechaza el duplicado, libera la plaza y propaga el 409")
+    void shouldReleaseSpot_whenDatabaseRejectsConcurrentDuplicate() {
+        givenVehicle(VehicleType.CAR, true);
+        // La comprobacion previa dice que no hay estancia activa: en el momento
+        // de mirar, era verdad. La otra peticion guarda entre esa consulta y
+        // nuestro save, que es exactamente la ventana que no se puede cerrar
+        // desde Java. Quien lanza aqui es el indice unico de la base de datos,
+        // traducido por StayPersistenceAdapter.
+        givenNoActiveStay();
+        when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
+        when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
+        givenTicketIssued();
+        when(stayPersistence.save(any(Stay.class))).thenThrow(new DuplicateActiveStayException(
+                "El vehiculo " + vehicleId + " ya tiene una estancia en curso"));
+
+        assertThrows(DuplicateActiveStayException.class,
+                () -> useCase.execute(new StayCreateDTO(PLATE, null)));
+
+        // Lo importante: la plaza que habiamos ocupado se devuelve. Si no, cada
+        // carrera perdida dejaria una plaza inutilizada para siempre.
+        verify(spotPort).releaseSpot(spotId);
+    }
+
     @Test
     @DisplayName("si tampoco se puede liberar, gana el error original")
     void shouldPropagateOriginalError_whenCompensationAlsoFails() {

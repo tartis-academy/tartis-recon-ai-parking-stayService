@@ -17,6 +17,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.context.annotation.Profile;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -25,8 +28,7 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http,
-                                    CustomAccessDeniedHandler customAccessDeniedHandler,
-                                    CustomAuthenticationEntryPoint customAuthenticationEntryPoint) throws Exception {
+                                    @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -39,8 +41,8 @@ public class SecurityConfig {
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
             )
             .exceptionHandling(eh -> eh
-                .accessDeniedHandler(customAccessDeniedHandler)
-                .authenticationEntryPoint(customAuthenticationEntryPoint)
+                .accessDeniedHandler((request, response, ex) -> resolver.resolveException(request, response, null, ex))
+                .authenticationEntryPoint((request, response, ex) -> resolver.resolveException(request, response, null, ex))
             );
         return http.build();
     }
@@ -127,15 +129,5 @@ public class SecurityConfig {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(new KeycloakRoleConverter());
         return converter;
-    }
-
-    @Bean
-    CustomAccessDeniedHandler customAccessDeniedHandler(ObjectMapper objectMapper) {
-        return new CustomAccessDeniedHandler(objectMapper);
-    }
-
-    @Bean
-    CustomAuthenticationEntryPoint customAuthenticationEntryPoint(ObjectMapper objectMapper) {
-        return new CustomAuthenticationEntryPoint(objectMapper);
     }
 }

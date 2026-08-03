@@ -28,7 +28,7 @@ info:
     to detect the reverse-out automatically. Confirm with the team whether
     an automatic sensor-triggered path (event/webhook) is also expected in
     Phase 1, or if manual-only is sufficient for now.
-  version: 2.1.0
+  version: 2.2.0
   contact:
     name: TARTIS Recon-AI - Team Parking
 
@@ -38,6 +38,8 @@ servers:
 tags:
   - name: stays
     description: Stay lifecycle (entry, exit)
+  - name: events
+    description: Real-time notifications (Server-Sent Events, SSE-02)
 
 paths:
   /stays/check-in:
@@ -72,8 +74,11 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >
-            No spots for the vehicle type (RN-01) or the vehicle already has an
-            IN_PROGRESS stay (IN-02, CB05)
+            No spots for the vehicle type (RN-01), or the vehicle already has an
+            IN_PROGRESS stay (IN-02, CB05). The second case also covers the race
+            where two simultaneous check-ins of the same plate reach the service
+            at once: only the first one wins, the loser gets this 409 and its
+            spot is released. Retrying will not help until the vehicle exits.
           content:
             application/json:
               schema:
@@ -124,7 +129,11 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >
-            Stay is not IN_PROGRESS, or entry ticket already used (IN-21)
+            Stay is not IN_PROGRESS, or entry ticket already used (IN-21), or the
+            stay was closed by another concurrent request while this one was
+            calculating the amount. In the concurrent case the check-out DID
+            succeed (the other request completed it): the client should re-read
+            the stay instead of retrying, since a retry will return 404.
           content:
             application/json:
               schema:
@@ -236,6 +245,74 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Real-time event stream (SSE-02)
+      description: >
+        Long-lived text/event-stream connection. Emits a `stay_updated` event
+        (payload: StayClosedEvent) whenever a stay is closed (check-out).
+        stay-service is the orchestrator and centralizes the stream (SSE-01):
+        it forwards the same domain events it already publishes to RabbitMQ,
+        it does not aggregate events published by other services.
+
+        Restricted to ADMIN/OPERARIO: the broadcast is not filtered per user,
+        so a USER role would see other people's plates and exit times.
+
+        Browsers' native EventSource cannot set the Authorization header, so
+        the JWT is also accepted as the `access_token` query parameter.
+
+        Today ONLY check-out emits an SSE event (`stay_updated`). Check-in does
+        not produce one yet, so integrators must not assume entry events are
+        covered (see docs/adr/0001).
+      parameters:
+        - name: access_token
+          in: query
+          required: false
+          description: >
+            JWT bearer token, alternative to the Authorization header for
+            EventSource clients that cannot set custom headers.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: >
+            text/event-stream connection established. On connect the server
+            sends `event:connected` with `data:ok`, then a `:heartbeat` comment
+            line every few seconds to keep proxies from closing the connection.
+
+            The only domain event is `event:stay_updated`, whose `data:` line is
+            the JSON of StayClosedEvent:
+            `eventId` (uuid), `type` (string, always "StayClosedEvent"),
+            `version` (string, always "v1"), `occurredAt` (date-time) and
+            `data` with `stayId` (uuid), `spotId` (uuid), `plate` (string),
+            `entryDate` (date-time), `exitDate` (date-time) and
+            `totalAmount` (number).
+
+            Each `event:stay_updated` also carries an `id:` line (same value as
+            `eventId`) so EventSource clients populate `Last-Event-ID` on
+            reconnect. There is no server-side event log to replay from a given
+            id yet — the registry only holds in-memory emitters — so a
+            reconnecting client simply gets new events going forward, it does
+            not recover what it missed while disconnected.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Valid token without ADMIN/OPERARIO role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:

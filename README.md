@@ -24,3 +24,27 @@ vulnerabilidad `CRITICAL` hace fallar el job.
 Si una `CRITICAL` no tiene fix disponible todavía y hay que aceptar el riesgo
 de forma consciente, se ignora explícitamente añadiendo su CVE a un
 `.trivyignore` en la raíz del repo (no existe ninguno hoy).
+
+## Eventos en tiempo real (SSE)
+
+`GET /v1/events` (rol `ADMIN` u `OPERARIO`) abre una conexión
+`text/event-stream` de larga duración. Al conectar, el servidor manda
+`event:connected` con `data:ok`, y cada pocos segundos una línea de
+comentario `:heartbeat` para que proxies intermedios no corten la conexión
+por inactividad.
+
+El único evento de dominio hoy es `event:stay_updated`, emitido al cerrar
+una estancia (check-out). Trae:
+- `id:` — mismo valor que el `eventId` del payload; el navegador lo usa para
+  rellenar `Last-Event-ID` si reconecta. No hay un log de eventos que
+  reproducir: un cliente que reconecta solo recibe eventos nuevos, no
+  recupera lo que se perdió mientras estaba desconectado.
+- `data:` — JSON de `StayClosedEvent` (`eventId`, `type`, `version`,
+  `occurredAt`, `data` con `stayId`, `spotId`, `plate`, `entryDate`,
+  `exitDate`, `totalAmount`).
+
+Los navegadores no pueden mandar cabecera `Authorization` en `EventSource`,
+así que el JWT también se acepta como query param `access_token`.
+
+Detalle completo (contrato, roles, límites) en `openapi.yml` (path
+`/events`) y en `docs/adr/0001-sse-endpoint-en-stay-service.md`.

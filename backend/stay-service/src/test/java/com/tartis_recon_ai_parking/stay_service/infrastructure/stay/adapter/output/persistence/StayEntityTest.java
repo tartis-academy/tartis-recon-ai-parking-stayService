@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Entidad JPA sin logica propia: solo verifica que cada setter deja el valor
@@ -42,6 +43,7 @@ class StayEntityTest {
         entity.setCheckOut(checkOut);
         entity.setTotalAmount(totalAmount);
         entity.setStatus(StayStatus.FINISHED);
+        entity.setVersion(4L);
 
         assertEquals(uniqueId, entity.getUniqueId());
         assertEquals(vehicleId, entity.getVehicleId());
@@ -52,5 +54,20 @@ class StayEntityTest {
         assertEquals(checkOut, entity.getCheckOut());
         assertEquals(0, totalAmount.compareTo(entity.getTotalAmount()));
         assertEquals(StayStatus.FINISHED, entity.getStatus());
+        assertEquals(Long.valueOf(4L), entity.getVersion());
+    }
+
+    /**
+     * Una fila nueva debe salir con la version a null. Spring Data usa
+     * "version == null" para decidir INSERT en vez de UPDATE, porque el id lo
+     * genera el dominio y no la base de datos y por tanto nunca es null.
+     */
+    @Test
+    void newEntityShouldHaveNullVersion_SoSpringDataTreatsItAsAnInsert() {
+        StayEntity entity = new StayEntity(
+                UUID.randomUUID(), UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(),
+                UUID.randomUUID(), Instant.now(), null, null, StayStatus.IN_PROGRESS);
+
+        assertNull(entity.getVersion());
     }
 }
