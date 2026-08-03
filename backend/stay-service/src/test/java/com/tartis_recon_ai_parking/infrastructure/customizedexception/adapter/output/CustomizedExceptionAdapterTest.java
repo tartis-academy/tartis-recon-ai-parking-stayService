@@ -183,7 +183,7 @@ class CustomizedExceptionAdapterTest {
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 
-@Test
+    @Test
     @DisplayName("handleUnauthorized: traduce AuthenticationException a 401")
     void handleUnauthorized_buildsUnauthorized() {
         org.springframework.security.authentication.BadCredentialsException ex =
