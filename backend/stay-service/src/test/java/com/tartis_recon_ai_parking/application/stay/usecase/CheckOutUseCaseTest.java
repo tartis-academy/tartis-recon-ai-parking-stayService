@@ -12,6 +12,7 @@ import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort.
 import com.tartis_recon_ai_parking.domain.stay.Stay;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.StayNotFoundException;
 
@@ -174,5 +175,32 @@ class CheckOutUseCaseTest {
 
         assertEquals(StayStatus.FINISHED, result.getStay().getStatus());
         verify(eventPublisher).publish(any(StayClosedEvent.class));
+    }
+
+    // ------------------------------------------------------------------
+    // Condiciones de carrera
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("doble check-out simultaneo: quien pierde la carrera NO publica el evento de cierre")
+    void shouldNotPublishEvent_whenAnotherRequestClosedTheStayFirst() {
+        when(vehiclePort.findByPlate(PLATE))
+                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
+        when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(inProgressStay()));
+        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        // Otra peticion cerro la estancia mientras esta calculaba el importe: la
+        // version ya no coincide y el bloqueo optimista corta aqui.
+        when(stayPersistence.save(any(Stay.class)))
+                .thenThrow(new ConcurrentStayModificationException("otra operacion se adelanto"));
+
+        assertThrows(ConcurrentStayModificationException.class,
+                () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
+
+        // Esta es la asercion que da sentido al orden guardar-antes-de-publicar.
+        // Si se publicara primero, ticket-service emitiria un segundo ticket de
+        // salida y spot-service liberaria por segunda vez una plaza que para
+        // entonces puede tener ya otro coche dentro.
+        verify(eventPublisher, never()).publish(any(StayClosedEvent.class));
     }
 }

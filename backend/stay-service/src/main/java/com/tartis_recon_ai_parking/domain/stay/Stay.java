@@ -20,6 +20,28 @@ public final class Stay {
     private final BigDecimal totalAmount;
     private final StayStatus status;
 
+    /**
+     * Token de concurrencia optimista: la version que tenia la fila en el
+     * momento de leerla.
+     *
+     * <p>No es un dato de negocio y no participa en ningun invariante. Vive aqui
+     * y no solo en la capa de persistencia porque tiene que <b>viajar de vuelta
+     * intacto</b> desde la lectura hasta la escritura; si no, no sirve de nada.
+     *
+     * <p>El motivo es la propia condicion de carrera que venimos a cerrar. En un
+     * check-out, entre el {@code findByVehicleIdAndStatus} y el {@code save} hay
+     * una llamada HTTP a tariff-service: son milisegundos, pero suficientes para
+     * que otra peticion cierre la misma estancia por detras. Si la version se
+     * volviera a leer en el momento de guardar, se leeria la version <em>ya
+     * incrementada</em> por esa otra peticion y el UPDATE la pisaria tan
+     * contento. Solo comparando contra la version leida al principio se detecta
+     * que alguien ha tocado la fila mientras tanto.
+     *
+     * <p>{@code null} significa "estancia nueva, todavia no esta en la base de
+     * datos": es lo que distingue un INSERT de un UPDATE.
+     */
+    private final Long version;
+
     private Stay(UUID id,
                  UUID vehicleId,
                  VehicleType vehicleType,
@@ -28,7 +50,8 @@ public final class Stay {
                  Instant checkIn,
                  Instant checkOut,
                  BigDecimal totalAmount,
-                 StayStatus status) {
+                 StayStatus status,
+                 Long version) {
         this.id = required(id, "id");
         this.vehicleId = required(vehicleId, "vehicleId");
         this.vehicleType = required(vehicleType, "vehicleType");
@@ -38,9 +61,11 @@ public final class Stay {
         this.status = required(status, "status");
         this.checkOut = checkOut;
         this.totalAmount = totalAmount;
+        this.version = version;
         validate();
     }
 
+    /** Estancia nueva: sin version, porque todavia no hay fila que versionar. */
     public static Stay checkIn(UUID id,
                                UUID vehicleId,
                                VehicleType vehicleType,
@@ -48,9 +73,14 @@ public final class Stay {
                                UUID tariffId,
                                Instant checkIn) {
         return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
-                null, null, StayStatus.IN_PROGRESS);
+                null, null, StayStatus.IN_PROGRESS, null);
     }
 
+    /**
+     * Reconstruye una estancia sin token de concurrencia. Sirve para tests y
+     * para cualquier reconstruccion que no vaya a volver a escribirse; el
+     * camino que si va a escribir debe usar la sobrecarga con {@code version}.
+     */
     public static Stay restore(UUID id,
                                UUID vehicleId,
                                VehicleType vehicleType,
@@ -60,21 +90,45 @@ public final class Stay {
                                Instant checkOut,
                                BigDecimal totalAmount,
                                StayStatus status) {
-        return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
-                checkOut, totalAmount, status);
+        return restore(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
+                checkOut, totalAmount, status, null);
     }
 
+    /**
+     * Reconstruye una estancia leida de la base de datos conservando su version.
+     * Es la que usa el mapper de persistencia.
+     */
+    public static Stay restore(UUID id,
+                               UUID vehicleId,
+                               VehicleType vehicleType,
+                               UUID spotId,
+                               UUID tariffId,
+                               Instant checkIn,
+                               Instant checkOut,
+                               BigDecimal totalAmount,
+                               StayStatus status,
+                               Long version) {
+        return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
+                checkOut, totalAmount, status, version);
+    }
+
+    /**
+     * La estancia resultante <b>hereda la version</b> de la que se leyo. Ese
+     * arrastre es lo que permite que el UPDATE lleve el {@code WHERE version = ?}
+     * correcto y falle si otro check-out se ha adelantado.
+     */
     public Stay finish(Instant checkOutAt, BigDecimal totalAmount) {
         ensureModifiable("finalizar");
         return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
                 required(checkOutAt, "checkOut"), required(totalAmount, "totalAmount"),
-                StayStatus.FINISHED);
+                StayStatus.FINISHED, version);
     }
 
+    /** Igual que {@link #finish}: conserva la version leida. */
     public Stay cancel(Instant cancelledAt) {
         ensureModifiable("anular");
         return new Stay(id, vehicleId, vehicleType, spotId, tariffId, checkIn,
-                required(cancelledAt, "cancelledAt"), null, StayStatus.CANCELLED);
+                required(cancelledAt, "cancelledAt"), null, StayStatus.CANCELLED, version);
     }
 
     public boolean isActive() {
@@ -179,6 +233,16 @@ public final class Stay {
 
     public StayStatus getStatus() {
         return status;
+    }
+
+    /**
+     * Version de la fila en el momento de leerla, o {@code null} si la estancia
+     * todavia no se ha persistido. Solo la usa la capa de persistencia para el
+     * control de concurrencia optimista: no forma parte de la identidad de la
+     * estancia, por eso queda fuera de {@link #equals} y de {@link #toString}.
+     */
+    public Long getVersion() {
+        return version;
     }
 
     @Override
