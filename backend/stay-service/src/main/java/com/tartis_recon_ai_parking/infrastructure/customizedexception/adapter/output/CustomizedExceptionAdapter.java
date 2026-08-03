@@ -17,11 +17,21 @@ import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.ou
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 
@@ -186,6 +196,109 @@ public class CustomizedExceptionAdapter {
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
         return build(HttpStatus.BAD_REQUEST, message, request);
+    }
+
+    // ============================================================
+    // Rupturas a nivel de base de datos (escenarios de ruptura BD)
+    // ============================================================
+
+    /**
+     * Postgres caido, inalcanzable o con el pool de conexiones agotado
+     * (CannotCreateTransactionException, DataAccessResourceFailureException) y
+     * timeouts de consulta (QueryTimeoutException). Es infraestructura caida,
+     * el mismo tipo de fallo que ya se comunica como 503 para los servicios
+     * externos: el operario del totem tiene que poder distinguir "espera y
+     * reintenta" de "hay un bug".
+     *
+     * <p>El detalle real (host, SQL, causa raiz) se registra en el log del
+     * servidor; al cliente solo llega el mensaje generico (IN-36).
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class,
+            DataAccessResourceFailureException.class,
+            QueryTimeoutException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseUnavailable(RuntimeException ex,
+                                                                   HttpServletRequest request) {
+        log.error("Fallos de infraestructura de base de datos en {}", request.getRequestURI(), ex);
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "La base de datos no esta disponible, reintente la operacion en unos instantes", request);
+    }
+
+    /**
+     * Deadlock y bloqueos pesimistas no adquiridos (DeadlockLoserDataAccessException,
+     * CannotAcquireLockException, PessimisticLockingFailureException). Son conflictos
+     * transitorios de concurrencia, no bugs: la operacion puede reintentarse tal cual
+     * y tiene posibilidades de completarse. Mismo criterio que el 409 de las
+     * condiciones de carrera ({@link #handleConcurrentModification}).
+     */
+    @ExceptionHandler({DeadlockLoserDataAccessException.class,
+            CannotAcquireLockException.class,
+            PessimisticLockingFailureException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseConflict(org.springframework.dao.DataAccessException ex,
+                                                                HttpServletRequest request) {
+        log.warn("Conflicto transitorio de base de datos en {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT,
+                "La base de datos no pudo completar la operacion por un conflicto de concurrencia,"
+                        + " reintente la operacion", request);
+    }
+
+    /**
+     * Queries mal formadas y mal uso de la API de persistencia
+     * (InvalidDataAccessApiUsageException, JpaSystemException). Son bugs
+     * nuestros, no fallos de infraestructura: se quedan en 500 para que no se
+     * confundan con un problema del entorno que se resolveria reintentando.
+     * Caen en la red de seguridad generica ({@link #handleUnexpected}) y el
+     * detalle queda solo en el log.
+     */
+
+    // ============================================================
+    // Errores de entrada de Spring MVC (400/405 en vez de 500)
+    // ============================================================
+
+    /**
+     * Parametro de ruta o query con el tipo equivocado (un UUID donde se espera
+     * {@code /v1/stays/{stayId}}), o un enum invalido (status de listado).
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "El valor del parametro '" + ex.getName() + "' no es valido", request);
+    }
+
+    /** Cuerpo JSON malformado o inesperado para el contrato del endpoint. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
+                                                              HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "El cuerpo de la peticion no es un JSON valido para este endpoint", request);
+    }
+
+    /** Falta un parametro de query obligatorio. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Falta el parametro obligatorio '" + ex.getParameterName() + "'", request);
+    }
+
+    /**
+     * {@code page} negativo o {@code size} fuera de rango: {@code PageRequest.of}
+     * lanza {@code IllegalArgumentException}. Es entrada invalida del cliente,
+     * no un fallo interno (el tope maximo de {@code size} lo aplica el propio
+     * adaptador REST antes de llegar aqui).
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex,
+                                                               HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Parametros de paginacion invalidos", request);
+    }
+
+    /** Metodo HTTP incorrecto para la ruta (GET a un POST, etc.). */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
+                                                                  HttpServletRequest request) {
+        return build(HttpStatus.METHOD_NOT_ALLOWED,
+                "Metodo HTTP no permitido para esta ruta: " + ex.getMethod(), request);
     }
 
     /**

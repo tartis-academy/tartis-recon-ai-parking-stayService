@@ -42,6 +42,16 @@ import java.util.UUID;
 @RequestMapping("/v1/stays")
 public class StayRestAdapter {
 
+    /**
+     * Tope maximo del parametro {@code size} del listado (escenarios de ruptura
+     * BD). {@code size=1000000} dispararia una consulta enorme y, encima, el
+     * N+1 contra vehicle-service que {@code ListStaysUseCase} documenta como
+     * aceptable solo porque "size" esta acotado. Valores por encima se recortan;
+     * valores invalidos (0 o negativos) siguen llegando a {@code PageRequest.of},
+     * que los rechaza con 400 via {@code CustomizedExceptionAdapter}.
+     */
+    static final int MAX_LIST_SIZE = 100;
+
     private final CheckInUseCase checkInUseCase;
     private final CheckOutUseCase checkOutUseCase;
     private final GetStayUseCase getStayUseCase;
@@ -78,7 +88,7 @@ public class StayRestAdapter {
 
     @PostMapping("/check-out")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
-    public ResponseEntity<CheckOutResponse> checkOut(@RequestBody StayCheckOutRequest request) {
+    public ResponseEntity<CheckOutResponse> checkOut(@Valid @RequestBody StayCheckOutRequest request) {
         CheckOutResultDTO result = checkOutUseCase.execute(mapper.toCheckOutDTO(request));
         return ResponseEntity.ok(mapper.toCheckOutResponse(result, request.plate));
     }
@@ -110,7 +120,8 @@ public class StayRestAdapter {
             @RequestParam(required = false) StayStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        StayPageDTO result = listStaysUseCase.execute(status, page, size);
+        int cappedSize = Math.min(size, MAX_LIST_SIZE);
+        StayPageDTO result = listStaysUseCase.execute(status, page, cappedSize);
         return ResponseEntity.ok(mapper.toStayPageResponse(result));
     }
 }
