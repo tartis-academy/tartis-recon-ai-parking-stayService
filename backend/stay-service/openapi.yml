@@ -138,6 +138,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -503,6 +505,20 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: >
+        A downstream service (tariff/spot/ticket/vehicle) is unavailable, timed
+        out or returned a non-business error. During check-out this is most
+        often tariff-service: the amount cannot be calculated, so per RES-05
+        (ADR 002) the exit is rejected and the stay stays IN_PROGRESS (RN-03: no
+        exit without a confirmed payment). When the tariffService circuit
+        breaker is OPEN the failure is returned immediately instead of waiting
+        for the timeout. The operator should retry shortly or apply the manual
+        exit procedure.
       content:
         application/json:
           schema:

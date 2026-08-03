@@ -2,6 +2,7 @@ package com.tartis_recon_ai_parking.infrastructure.config;
 
 import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -112,8 +113,36 @@ class CircuitBreakerBehaviourTest {
     }
 
     /**
-     * RES-03: vehicleService abre el circuito al alcanzar el umbral de fallos (10 fallos).
+     * RES-05 (ADR 002): tariffService es el circuito que protege el check-out.
+     * Config propia: ventana 10, minimo 5 llamadas, umbral 50 %. Con 5 fallos
+     * seguidos (100 % de fallo sobre el minimo) el circuito debe abrirse; a
+     * partir de ahi el check-out falla rapido (CallNotPermittedException -> 503)
+     * en vez de esperar el timeout contra tariff-service.
      */
+    @Test
+    void tariffServiceShouldOpenAfterFiveConsecutiveFailures() {
+        CircuitBreaker tariff = circuitBreakerRegistry.circuitBreaker("tariffService");
+
+        assertThat(tariff.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // 4 fallos: aun por debajo del minimo de 5 llamadas, sin evidencia
+        // suficiente, el circuito sigue cerrado.
+        for (int i = 0; i < 4; i++) {
+            tariff.onError(0, TimeUnit.MILLISECONDS,
+                    new TariffServiceException("tariff-service no responde"));
+        }
+        assertThat(tariff.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // El quinto fallo alcanza el minimo con 100 % de error: se abre.
+        tariff.onError(0, TimeUnit.MILLISECONDS,
+                new TariffServiceException("tariff-service no responde"));
+        assertThat(tariff.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        // Con el circuito abierto, las llamadas ya no se permiten: esto es lo
+        // que en produccion se traduce en CallNotPermittedException.
+        assertThat(tariff.tryAcquirePermission()).isFalse();
+    }
+  
     @Test
     void shouldOpenVehicleServiceAfterReachingFailureThreshold() {
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("vehicleService");
