@@ -159,6 +159,36 @@
 			<artifactId>h2</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Condiciones de carrera: los tests de concurrencia necesitan una
+		     Postgres de verdad, no H2. Dos motivos, ninguno opcional:
+		       1. El indice unico PARCIAL (UNIQUE ... WHERE status='IN_PROGRESS')
+		          no existe en H2, asi que sobre H2 el doble check-in no se
+		          detectaria y el test pasaria en verde sin probar nada.
+		       2. H2 en memoria no reproduce el aislamiento ni el bloqueo de
+		          filas de Postgres, que es justo lo que se esta probando.
+
+		     OJO CON EL NOMBRE DE LOS ARTEFACTOS. Spring Boot 4.1 gestiona
+		     Testcontainers 2.x (testcontainers.version = 2.0.5), y en la serie
+		     2 los modulos se renombraron con prefijo testcontainers-. Los
+		     nombres antiguos (junit-jupiter, postgresql a secas) solo llegan
+		     hasta 1.21.4, asi que con ellos Maven no encuentra la version en el
+		     BOM y falla al leer el pom. Por eso aqui no se declara <version>:
+		     con las coordenadas correctas, el BOM de Boot ya la aporta, y
+		     fijarla a mano solo conseguiria que se descuadre al subir de Boot.
+
+		     Los paquetes Java NO cambiaron en 2.x: PostgreSQLContainer sigue en
+		     org.testcontainers.containers, y @Testcontainers/@Container en
+		     org.testcontainers.junit.jupiter. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
 		<dependency>
 			<groupId>org.mapstruct</groupId>
 			<artifactId>mapstruct</artifactId>
