@@ -19,56 +19,84 @@ import java.util.UUID;
 public class StaySpotClientAdapter implements StaySpotPort {
 
     private final RestClient restClient;
+    private static final String CIRCUIT_BREAKER_NAME = "spotService";
 
     public StaySpotClientAdapter(
             RestClient.Builder builder,
-            @Value("${services.spot.url:http://spot-service:8080}") String spotServiceUrl
-    ) {
+            @Value("${services.spot.url:http://spot-service:8080}") String spotServiceUrl) {
         this.restClient = builder.baseUrl(spotServiceUrl).build();
     }
 
     @Override
-public UUID occupySpot(VehicleType vehicleType) {
-    SpotResponse response;
-    try {
-        response = restClient.post()
-                .uri("/v1/spots/occupy")
-                // El campo se llama "type", no "vehicleType": SpotRequest de
-                // spot-service solo declara `type` y no tiene @JsonAlias, asi
-                // que "vehicleType" no bindeaba a nada. La peticion pasaba el
-                // @Valid con type=null y spot respondia
-                // 409 "No hay plazas disponibles para el tipo null",
-                // que en el check-in se leia como "el parking esta lleno"
-                // habiendo plazas AVAILABLE. Detectado levantando el stack
-                // completo el 30/07.
-                .body(Map.of("type", vehicleType.name()))
-                .retrieve()
-                .body(SpotResponse.class); // <-- Uso del DTO limpia los warnings
-    } catch (HttpClientErrorException.Conflict e) {
-        // RN-01: confirmado contra el openapi.yml y el codigo de spot-service
-        // (OccupySpotUseCase / CustomizedExceptionAdapter): "sin plazas" del
-        // tipo solicitado se modela siempre como 409, nunca como 200 con id
-        // null. Es una respuesta valida de negocio, no un fallo de infraestructura.
-        throw new NoAvailableSpotException(
-                "No hay plazas disponibles para el tipo de vehiculo " + vehicleType, e);
-    } catch (RestClientException e) {
-        // spot-service caido, timeout, 5xx... no es RN-01 (no confundir con "sin
-        // plazas"): se traduce para que el frontend reciba un ErrorResponse
-        // interpretable en vez de una excepcion de red cruda (IN-36).
-        throw new SpotServiceException(
-                "No se pudo contactar con spot-service para ocupar una plaza de tipo " + vehicleType, e);
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "occupySpotFallback")
+    public UUID occupySpot(VehicleType vehicleType) {
+        SpotResponse response;
+        try {
+            response = restClient.post()
+                    .uri("/v1/spots/occupy")
+                    // El campo se llama "type", no "vehicleType": SpotRequest de
+                    // spot-service solo declara `type` y no tiene @JsonAlias, asi
+                    // que "vehicleType" no bindeaba a nada. La peticion pasaba el
+                    // @Valid con type=null y spot respondia
+                    // 409 "No hay plazas disponibles para el tipo null",
+                    // que en el check-in se leia como "el parking esta lleno"
+                    // habiendo plazas AVAILABLE. Detectado levantando el stack
+                    // completo el 30/07.
+                    .body(Map.of("type", vehicleType.name()))
+                    .retrieve()
+                    .body(SpotResponse.class); // <-- Uso del DTO limpia los warnings
+        } catch (HttpClientErrorException.Conflict e) {
+            // RN-01: confirmado contra el openapi.yml y el codigo de spot-service
+            // (OccupySpotUseCase / CustomizedExceptionAdapter): "sin plazas" del
+            // tipo solicitado se modela siempre como 409, nunca como 200 con id
+            // null. Es una respuesta valida de negocio, no un fallo de infraestructura.
+            throw new NoAvailableSpotException(
+                    "No hay plazas disponibles para el tipo de vehiculo " + vehicleType, e);
+        } catch (RestClientException e) {
+            // spot-service caido, timeout, 5xx... no es RN-01 (no confundir con "sin
+            // plazas"): se traduce para que el frontend reciba un ErrorResponse
+            // interpretable en vez de una excepcion de red cruda (IN-36).
+            throw new SpotServiceException(
+                    "No se pudo contactar con spot-service para ocupar una plaza de tipo " + vehicleType, e);
+        }
+
+        if (response == null || response.id() == null) {
+            // Un 200 sin id incumple el contrato de spot-service (RN-01 siempre
+            // responde 409, nunca 200 vacio): es un fallo del servicio externo, no
+            // un "sin plazas" legitimo.
+            throw new SpotServiceException(
+                    "Respuesta invalida de spot-service al ocupar una plaza de tipo " + vehicleType);
+        }
+
+        return response.id();
     }
 
-    if (response == null || response.id() == null) {
-        // Un 200 sin id incumple el contrato de spot-service (RN-01 siempre
-        // responde 409, nunca 200 vacio): es un fallo del servicio externo, no
-        // un "sin plazas" legitimo.
+    /**
+     * Fallback de occupySpot(). Se invoca con CallNotPermittedException cuando
+     * el circuito esta ABIERTO, o con SpotServiceException cuando el metodo
+     * fallo por un problema real de conectividad.
+     *
+     * NoAvailableSpotException NUNCA llega aqui (esta en ignore-exceptions):
+     * un "sin plazas" legitimo de un tipo de vehiculo sigue su camino normal
+     * hacia CheckInUseCase sin pasar por este fallback ni contar como fallo
+     * del circuito.
+     *
+     * CRITICO (RES-04): este fallback SIEMPRE lanza excepcion. Nunca debe
+     * devolver un UUID inventado, un UUID nulo silenciado, ni ningun valor
+     * que permita a CheckInUseCase continuar creando una Stay sin una plaza
+     * real detras (violaria IN-05: una estancia sin plaza asociada).
+     */
+    private UUID occupySpotFallback(VehicleType vehicleType, Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            throw new SpotServiceException(
+                    "spot-service no responde con normalidad ahora mismo (circuito abierto); "
+                            + "no se puede confirmar ni ocupar una plaza para el tipo " + vehicleType
+                            + ". Entrada no disponible temporalmente.",
+                    t);
+        }
         throw new SpotServiceException(
-                "Respuesta invalida de spot-service al ocupar una plaza de tipo " + vehicleType);
+                "No se pudo contactar con spot-service para ocupar una plaza de tipo " + vehicleType, t);
     }
-
-    return response.id();
-}
 
     @Override
     public void releaseSpot(UUID spotId) {
@@ -85,15 +113,15 @@ public UUID occupySpot(VehicleType vehicleType) {
 
     @Override
     public void updateSpotStatus(UUID spotId, String status) {
-    try {
-        restClient.patch()
-                .uri("/v1/spots/{id}/status", spotId)
-                .body(Map.of("status", status))
-                .retrieve()
-                .toBodilessEntity();
-    } catch (RestClientException e) {
-        throw new SpotServiceException(
-                "No se pudo contactar con spot-service para actualizar el estado de la plaza " + spotId, e);
+        try {
+            restClient.patch()
+                    .uri("/v1/spots/{id}/status", spotId)
+                    .body(Map.of("status", status))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new SpotServiceException(
+                    "No se pudo contactar con spot-service para actualizar el estado de la plaza " + spotId, e);
+        }
     }
-}
 }
