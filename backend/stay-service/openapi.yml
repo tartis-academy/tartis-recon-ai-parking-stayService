@@ -64,6 +64,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CheckInResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -119,6 +123,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CheckOutResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -165,6 +173,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StayResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Stay not found
           content:
@@ -194,6 +206,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StayResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Stay not found
           content:
@@ -241,6 +257,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StayPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -499,6 +519,18 @@ components:
   responses:
     BadRequest:
       description: Invalid request (field validation)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Token ausente, inválido o caducado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: El token es válido pero el rol no autoriza la operación
       content:
         application/json:
           schema:

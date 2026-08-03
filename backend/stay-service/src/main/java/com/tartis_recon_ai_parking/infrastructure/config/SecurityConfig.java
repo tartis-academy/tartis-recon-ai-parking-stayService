@@ -29,7 +29,7 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http,
-                                    @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) throws Exception {
+                                    @Qualifier("handlerExceptionResolver") HandlerExceptionResolver resolver) {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -43,8 +43,12 @@ public class SecurityConfig {
                 .authenticationEntryPoint(bearerEntryPoint(resolver))
             )
             .exceptionHandling(eh -> eh
+                // Defensivo: hoy ningun camino a nivel de filtros produce un 403
+                // (todo el denegado sale por @PreAuthorize dentro del
+                // DispatcherServlet, que ya cae en el resolver). Se deja como
+                // seguro por si alguien anade hasRole a authorizeHttpRequests.
                 .accessDeniedHandler((request, response, ex) -> resolver.resolveException(request, response, null, ex))
-                .authenticationEntryPoint((request, response, ex) -> resolver.resolveException(request, response, null, ex))
+                .authenticationEntryPoint(bearerEntryPoint(resolver))
             );
         return http.build();
     }
