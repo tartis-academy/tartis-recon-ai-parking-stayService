@@ -53,7 +53,7 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
 
     @Override
     public void publish(StayClosedEvent event) {
-        broadcast(EVENT_STAY_UPDATED, event);
+        broadcast(EVENT_STAY_UPDATED, event.eventId().toString(), event);
     }
 
     // Evita que Kong/un balanceador corte la conexion por inactividad.
@@ -73,10 +73,11 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
         return emitters.size();
     }
 
-    private void broadcast(String eventName, Object payload) {
+    // id: = eventId del payload, para que el cliente pueda mandar Last-Event-ID al reconectar.
+    private void broadcast(String eventName, String eventId, Object payload) {
         emitters.forEach((id, emitter) -> {
             try {
-                emitter.send(SseEmitter.event().name(eventName).data(payload));
+                emitter.send(SseEmitter.event().id(eventId).name(eventName).data(payload));
             } catch (Exception e) {
                 // IOException del socket + IllegalStateException del emitter ya completado.
                 remove(id);

@@ -281,6 +281,13 @@ paths:
             `data` with `stayId` (uuid), `spotId` (uuid), `plate` (string),
             `entryDate` (date-time), `exitDate` (date-time) and
             `totalAmount` (number).
+
+            Each `event:stay_updated` also carries an `id:` line (same value as
+            `eventId`) so EventSource clients populate `Last-Event-ID` on
+            reconnect. There is no server-side event log to replay from a given
+            id yet — the registry only holds in-memory emitters — so a
+            reconnecting client simply gets new events going forward, it does
+            not recover what it missed while disconnected.
           content:
             text/event-stream:
               schema:
