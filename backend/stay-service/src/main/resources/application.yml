@@ -82,8 +82,6 @@ resilience4j:
         wait-duration-in-open-state: 10s
         record-exceptions:
           - com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException
-        ignoreExceptions:
-          - com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException
 
       # tariff-service: solo interviene en check-out, con menos volumen de
       # llamadas, de ahi la ventana mas pequena. La espera es mas larga

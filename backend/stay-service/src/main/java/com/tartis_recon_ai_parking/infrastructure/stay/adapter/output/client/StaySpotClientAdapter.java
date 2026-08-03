@@ -74,30 +74,24 @@ public class StaySpotClientAdapter implements StaySpotPort {
     }
 
     /**
-     * Fallback de occupySpot(). Se invoca con CallNotPermittedException cuando
-     * el circuito esta ABIERTO, o con SpotServiceException cuando el metodo
-     * fallo por un problema real de conectividad.
+     * Fallback de occupySpot(). Se invoca EXCLUSIVAMENTE cuando el circuito esta
+     * ABIERTO
+     * (CallNotPermittedException).
      *
-     * NoAvailableSpotException NUNCA llega aqui (esta en ignore-exceptions):
-     * un "sin plazas" legitimo de un tipo de vehiculo sigue su camino normal
-     * hacia CheckInUseCase sin pasar por este fallback ni contar como fallo
-     * del circuito.
+     * Al tipar la excepcion en la firma, Resilience4j ignorara este fallback para
+     * cualquier otro error. Esto garantiza que las excepciones de negocio como
+     * NoAvailableSpotException (409) o problemas de tokens fluyan intactas hacia
+     * CheckInUseCase sin ser enmascaradas.
      *
-     * CRITICO (RES-04): este fallback SIEMPRE lanza excepcion. Nunca debe
-     * devolver un UUID inventado, un UUID nulo silenciado, ni ningun valor
-     * que permita a CheckInUseCase continuar creando una Stay sin una plaza
-     * real detras (violaria IN-05: una estancia sin plaza asociada).
+     * CRITICO (RES-04): este fallback SIEMPRE lanza excepcion para evitar
+     * crear una Stay sin una plaza real (violacion de IN-05).
      */
-    private UUID occupySpotFallback(VehicleType vehicleType, Throwable t) {
-        if (t instanceof CallNotPermittedException) {
-            throw new SpotServiceException(
-                    "spot-service no responde con normalidad ahora mismo (circuito abierto); "
-                            + "no se puede confirmar ni ocupar una plaza para el tipo " + vehicleType
-                            + ". Entrada no disponible temporalmente.",
-                    t);
-        }
+    private UUID occupySpotFallback(VehicleType vehicleType, CallNotPermittedException t) {
         throw new SpotServiceException(
-                "No se pudo contactar con spot-service para ocupar una plaza de tipo " + vehicleType, t);
+                "spot-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se puede confirmar ni ocupar una plaza para el tipo " + vehicleType
+                        + ". Entrada no disponible temporalmente.",
+                t);
     }
 
     @Override
