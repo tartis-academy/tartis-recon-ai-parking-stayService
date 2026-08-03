@@ -166,4 +166,32 @@ class CustomizedExceptionAdapterTest {
                 response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
+
+    @Test
+    @DisplayName("handleUnauthorized: traduce AuthenticationException a 401")
+    void handleUnauthorized_buildsUnauthorized() {
+        org.springframework.security.authentication.BadCredentialsException ex =
+                new org.springframework.security.authentication.BadCredentialsException("Token no valido");
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleUnauthorized(ex, request);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("Token de autenticación ausente, inválido o caducado.", response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleAccessDenied: traduce AccessDeniedException a 403")
+    void handleAccessDenied_buildsForbidden() {
+        org.springframework.security.access.AccessDeniedException ex =
+                new org.springframework.security.access.AccessDeniedException("Rol insuficiente");
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleAccessDenied(ex, request);
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals("No tiene permisos para realizar esta acción.", response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
 }
