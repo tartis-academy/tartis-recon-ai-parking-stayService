@@ -1,7 +1,9 @@
 package com.tartis_recon_ai_parking.infrastructure.config;
 
 import java.time.Duration;
+import java.util.UUID;
 
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
@@ -38,6 +40,14 @@ public class BeanConfiguration {
      * de Keycloak (ese llega por entorno, {@code STAY_CLIENT_ID}).
      */
     private static final String REGISTRATION_ID = "parking-stay";
+
+    /**
+     * GW-06: usuario que origino la cadena, para que los servicios destino
+     * puedan escribir "esto lo pidio operario.test" en vez de "esto lo pidio
+     * parking-stay-service". Contexto de log, nunca credencial: ver
+     * {@link #tracingContextInterceptor()}.
+     */
+    public static final String ORIGIN_USER_HEADER = "X-Origin-User";
 
     /**
      * stay-service es el unico microservicio que llama a otros por HTTP
@@ -88,7 +98,88 @@ public class BeanConfiguration {
         // manana aparece una quinta, queda cubierta sin tocar nada.
         return RestClient.builder()
                 .requestFactory(requestFactory)
-                .requestInterceptor(bearerTokenInterceptor(authorizedClientManager));
+                .requestInterceptor(bearerTokenInterceptor(authorizedClientManager))
+                // GW-06: sin esto la cadena de trazas se corta en el primer
+                // salto. Va DESPUES del de token a proposito: si Keycloak
+                // falla, el ServiceTokenException se lanza antes y no llegamos
+                // a mandar cabecera de correlacion a un sitio al que no vamos
+                // a llamar.
+                .requestInterceptor(tracingContextInterceptor());
+    }
+
+    /**
+     * GW-06 - propaga el correlation-id de esta peticion a los microservicios
+     * destino.
+     *
+     * <p>stay-service es el unico de los cinco con llamadas salientes, asi que
+     * es el unico sitio donde hace falta este interceptor y tambien el unico
+     * donde su ausencia se nota: sin el, un check-in genera cinco lineas de
+     * traza con cinco identificadores distintos, porque vehicle, spot, tariff
+     * y ticket no reciben cabecera y cada uno genera el suyo
+     * ({@link CorrelationIdFilter} hace exactamente eso cuando no le llega).
+     *
+     * <p>Lee del MDC, que es donde lo dejo {@link CorrelationIdFilter}. El MDC
+     * de SLF4J es ThreadLocal y las llamadas salientes de stay son sincronas
+     * (RestClient bloqueante sobre el hilo del servlet), asi que el valor esta
+     * disponible aqui sin necesidad de pasarlo por parametro por toda la
+     * aplicacion.
+     *
+     * <p><strong>Cuidado si algun dia esto se vuelve asincrono</strong>
+     * ({@code @Async}, WebClient reactivo, CompletableFuture con otro
+     * executor): el MDC NO se hereda al cambiar de hilo y este interceptor
+     * empezaria a mandar un identificador nuevo en cada llamada, en silencio.
+     * En ese momento hay que envolver el executor con un TaskDecorator que
+     * copie el MDC.
+     *
+     * <p>El caso "no hay nada en el MDC" es real y esperado: los consumidores
+     * de RabbitMQ corren en hilos del listener container, no en un hilo de
+     * servlet, asi que ahi no hubo CorrelationIdFilter. Se genera uno nuevo en
+     * vez de mandar la cabecera vacia, porque una traza parcial vale mas que
+     * ninguna. Cuando la correlacion cruce AMQP (propiedad estandar
+     * {@code correlationId} del mensaje) este caso deberia dejar de darse.
+     *
+     * <p>No se escribe nada en el MDC desde aqui: este interceptor solo lee.
+     * Poner claves aqui significaria tener que limpiarlas, y el dueno del ciclo
+     * de vida del MDC son los filtros, no el cliente HTTP.
+     *
+     * <p>Ademas del correlation-id propaga la <strong>identidad de origen</strong>
+     * en {@code X-Origin-User}, por un motivo especifico de stay: este servicio
+     * pide su propio token con {@code client_credentials} y NO reenvia el del
+     * usuario (decision razonada arriba, en {@link #authorizedClientManager}).
+     * El efecto colateral es que vehicle, spot, tariff y ticket ven siempre
+     * {@code azp=parking-stay-service} y pierden por completo que operario
+     * origino la operacion. Sin esta cabecera, el criterio "quien llama a que"
+     * quedaria cubierto solo en el primer salto.
+     *
+     * <p><strong>{@code X-Origin-User} NO es una credencial y no debe usarse
+     * para autorizar nada.</strong> La autorizacion de estas llamadas la da el
+     * bearer de {@code client_credentials} que puso el interceptor anterior.
+     * Esto es contexto de log y nada mas: llega desde otro servicio y no va
+     * firmada. Si alguien escribe algun dia un {@code @PreAuthorize} que lea
+     * esta cabecera, es un fallo de seguridad.
+     *
+     * <p>Alternativa descartada por coste: meter el {@code preferred_username}
+     * original como claim del token de servicio via token exchange en Keycloak.
+     * Es mas limpio conceptualmente y bastante mas caro de montar; para el
+     * alcance de GW-06 la cabecera basta.
+     */
+    private ClientHttpRequestInterceptor tracingContextInterceptor() {
+        return (request, body, execution) -> {
+            String correlationId = MDC.get(CorrelationIdFilter.CORRELATION_ID_MDC_KEY);
+
+            if (correlationId == null || correlationId.isBlank()) {
+                correlationId = UUID.randomUUID().toString();
+            }
+
+            request.getHeaders().set(CorrelationIdFilter.CORRELATION_ID_HEADER, correlationId);
+
+            String originUser = MDC.get(RequestIdentityFilter.USER_NAME_MDC_KEY);
+            if (originUser != null && !originUser.isBlank()) {
+                request.getHeaders().set(ORIGIN_USER_HEADER, originUser);
+            }
+
+            return execution.execute(request, body);
+        };
     }
 
     private ClientHttpRequestInterceptor bearerTokenInterceptor(OAuth2AuthorizedClientManager manager) {
