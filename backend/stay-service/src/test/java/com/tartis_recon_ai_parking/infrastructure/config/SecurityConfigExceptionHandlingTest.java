@@ -16,11 +16,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,10 +56,11 @@ class SecurityConfigExceptionHandlingTest {
     }
 
     @Test
-    @DisplayName("SEC-11: Sin token, el authenticationEntryPoint enruta a CustomizedExceptionAdapter → 401 con ErrorResponse")
+    @DisplayName("SEC-11: Sin token, el authenticationEntryPoint enruta a CustomizedExceptionAdapter → 401 con ErrorResponse y cabecera WWW-Authenticate")
     void shouldReturn401WithErrorResponseWhenNoToken() throws Exception {
         mockMvc.perform(get("/v1/stays"))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, containsString("Bearer")))
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.message").value("Token de autenticación ausente, inválido o caducado."))
@@ -65,13 +68,14 @@ class SecurityConfigExceptionHandlingTest {
     }
 
     @Test
-    @DisplayName("SEC-11: Con JWT sintácticamente inválido, el authenticationEntryPoint enruta a CustomizedExceptionAdapter → 401 con ErrorResponse")
+    @DisplayName("SEC-11: Con JWT sintácticamente inválido, el authenticationEntryPoint enruta a CustomizedExceptionAdapter → 401 con ErrorResponse y cabecera WWW-Authenticate")
     void shouldReturn401WithErrorResponseWhenMalformedJwt() throws Exception {
         when(jwtDecoder.decode(anyString())).thenThrow(new BadJwtException("Invalid or expired JWT"));
 
         mockMvc.perform(get("/v1/stays")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer not-a-jwt"))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, containsString("Bearer")))
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.message").value("Token de autenticación ausente, inválido o caducado."))
@@ -79,7 +83,7 @@ class SecurityConfigExceptionHandlingTest {
     }
 
     @Test
-    @DisplayName("SEC-11: Con rol insuficiente, el accessDeniedHandler enruta a CustomizedExceptionAdapter → 403 con ErrorResponse")
+    @DisplayName("SEC-11: Con rol insuficiente, @PreAuthorize enruta a CustomizedExceptionAdapter → 403 con ErrorResponse")
     void shouldReturn403WithErrorResponseWhenInsufficientRole() throws Exception {
         mockMvc.perform(get("/v1/stays")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_USER"))))
