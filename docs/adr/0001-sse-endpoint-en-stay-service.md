@@ -57,6 +57,22 @@ dominio.
   Implicación de seguridad conocida y aceptada: el token queda en logs de
   acceso e historial del navegador con más facilidad que en una cabecera;
   se mitiga acortando el timeout del emitter.
+- `publish()` y `heartbeat()` son síncronos: `publish()` corre en el hilo del
+  servlet que atiende `POST /v1/stays/check-out` y `heartbeat()` en el pool de
+  `@Scheduled`, y `emitter.send()` bloquea en el socket de cada cliente. Un
+  cliente lento añade latencia al check-out y retrasa el heartbeat del resto.
+  Se acepta para este alcance (subida a `spring.task.scheduling.pool.size=2`
+  como mitigación mínima); un `@Async` con executor propio implicaría propagar
+  MDC/correlation-id, ver `BeanConfiguration`.
+
+`EventStreamRestAdapter` (adaptador de entrada) inyecta `SseEmitterRegistry`
+por tipo concreto para llamar a `subscribe()`, que no forma parte de ningún
+puerto — el registro solo implementa el puerto de salida
+`StayEventStreamPublisher` (`publish()`). Rompe la convención hexagonal del
+repo (los adaptadores de entrada solo deberían depender de puertos/casos de
+uso) y es un atajo deliberado: con un único llamador, crear un puerto de
+entrada solo para `subscribe()` sería sobreingeniería. Si aparece un segundo
+consumidor, extraer el puerto.
 
 ## Nota de implementación
 

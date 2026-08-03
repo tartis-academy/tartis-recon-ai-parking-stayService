@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -60,6 +61,26 @@ class SseEmitterRegistryTest {
 
         SseEmitterRegistry empty = new SseEmitterRegistry(1_800_000L);
         empty.publish(event);
+    }
+
+    @Test
+    @DisplayName("publish() sobre un emitter ya completado no rompe el broadcast y lo descarta")
+    void publishRemovesAlreadyCompletedEmitter() {
+        SseEmitter dead = registry.subscribe();
+        registry.subscribe();
+
+        // complete() marca el emitter sin disparar los callbacks de Spring (no hay
+        // handler en un test unitario), asi que sigue en el mapa hasta el envio.
+        dead.complete();
+        assertEquals(2, registry.activeCount());
+
+        StayClosedEvent event = StayClosedEvent.of(
+                UUID.randomUUID(), UUID.randomUUID(), "1234ABC",
+                Instant.now().minusSeconds(3600), Instant.now(),
+                new BigDecimal("5.00"), Instant.now());
+
+        assertDoesNotThrow(() -> registry.publish(event));
+        assertEquals(1, registry.activeCount());
     }
 
     @Test

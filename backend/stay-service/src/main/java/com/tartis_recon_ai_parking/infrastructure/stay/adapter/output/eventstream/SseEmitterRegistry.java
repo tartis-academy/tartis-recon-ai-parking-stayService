@@ -10,7 +10,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,8 +42,10 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
 
         try {
             emitter.send(SseEmitter.event().name("connected").data("ok"));
-        } catch (IOException e) {
+        } catch (Exception e) {
+            // IOException del socket + IllegalStateException del emitter ya completado.
             remove(id);
+            emitter.completeWithError(e);
         }
 
         return emitter;
@@ -61,7 +62,8 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
         emitters.forEach((id, emitter) -> {
             try {
                 emitter.send(SseEmitter.event().comment("heartbeat"));
-            } catch (IOException e) {
+            } catch (Exception e) {
+                // IOException del socket + IllegalStateException del emitter ya completado.
                 remove(id);
             }
         });
@@ -75,7 +77,8 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
         emitters.forEach((id, emitter) -> {
             try {
                 emitter.send(SseEmitter.event().name(eventName).data(payload));
-            } catch (IOException e) {
+            } catch (Exception e) {
+                // IOException del socket + IllegalStateException del emitter ya completado.
                 remove(id);
             }
         });

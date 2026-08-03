@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,16 +33,6 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 @ActiveProfiles("test")
 class EventStreamRestAdapterMvcTest {
 
-    @org.springframework.boot.test.context.TestConfiguration
-    static class TestConfig {
-        @org.springframework.context.annotation.Bean
-        public com.fasterxml.jackson.databind.ObjectMapper objectMapper() {
-            return new com.fasterxml.jackson.databind.ObjectMapper()
-                    .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
-                    .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        }
-    }
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -51,7 +42,7 @@ class EventStreamRestAdapterMvcTest {
     @Test
     @DisplayName("Debe rechazar con 401 una peticion sin token")
     void shouldReturn401WhenNoTokenProvided() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get("/v1/events"))
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH))
                 .andExpect(MockMvcResultMatchers.status().isUnauthorized());
         verify(registry, never()).subscribe();
     }
@@ -59,7 +50,7 @@ class EventStreamRestAdapterMvcTest {
     @Test
     @DisplayName("USER: debe denegar la suscripcion al stream (403)")
     void shouldDenyEventsForUser() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get("/v1/events").with(userJwt()))
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).with(userJwt()))
                 .andExpect(MockMvcResultMatchers.status().isForbidden());
         verify(registry, never()).subscribe();
     }
@@ -69,7 +60,7 @@ class EventStreamRestAdapterMvcTest {
     void shouldAllowEventsForAdmin() throws Exception {
         when(registry.subscribe()).thenReturn(new SseEmitter());
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/v1/events").with(adminJwt())
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).with(adminJwt())
                         .accept(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(MockMvcResultMatchers.request().asyncStarted())
                 .andExpect(MockMvcResultMatchers.status().isOk());
@@ -82,7 +73,7 @@ class EventStreamRestAdapterMvcTest {
     void shouldAllowEventsForOperario() throws Exception {
         when(registry.subscribe()).thenReturn(new SseEmitter());
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/v1/events").with(operarioJwt())
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).with(operarioJwt())
                         .accept(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(MockMvcResultMatchers.request().asyncStarted())
                 .andExpect(MockMvcResultMatchers.status().isOk());
@@ -90,7 +81,7 @@ class EventStreamRestAdapterMvcTest {
         verify(registry).subscribe();
     }
 
-    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor adminJwt() {
+    private static JwtRequestPostProcessor adminJwt() {
         return jwt()
                 .jwt(j -> j
                         .claim("sub", UUID.randomUUID().toString())
@@ -99,7 +90,7 @@ class EventStreamRestAdapterMvcTest {
                 .authorities(new KeycloakRoleConverter());
     }
 
-    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor operarioJwt() {
+    private static JwtRequestPostProcessor operarioJwt() {
         return jwt()
                 .jwt(j -> j
                         .claim("sub", UUID.randomUUID().toString())
@@ -108,7 +99,7 @@ class EventStreamRestAdapterMvcTest {
                 .authorities(new KeycloakRoleConverter());
     }
 
-    private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor userJwt() {
+    private static JwtRequestPostProcessor userJwt() {
         return jwt()
                 .jwt(j -> j
                         .claim("sub", UUID.randomUUID().toString())
