@@ -3,12 +3,15 @@ package com.tartis_recon_ai_parking.application.stay.usecase;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.EntryTicketDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
+
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort.VehicleInfo;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
@@ -76,9 +79,14 @@ public class CheckInUseCase {
     private final StaySpotPort spotPort;
     private final StayTariffPort tariffPort;
     private final StayTicketPort ticketPort;
+    private final StayEventStreamPublisher eventStreamPublisher;
     private final StayDTOFactory stayDTOFactory;
     private final Clock clock;
 
+    /**
+     * Constructor sobrecargado para mantener compatibilidad hacia atras con tests y llamantes
+     * que no requieren emision de eventos SSE (asigna null a eventStreamPublisher).
+     */
     public CheckInUseCase(StayPersistence stayPersistence,
                           StayVehiclePort vehiclePort,
                           StaySpotPort spotPort,
@@ -86,14 +94,31 @@ public class CheckInUseCase {
                           StayTicketPort ticketPort,
                           StayDTOFactory stayDTOFactory,
                           Clock clock) {
+        this(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort, null, stayDTOFactory, clock);
+    }
+
+    /**
+     * Constructor principal que incluye el emisor SSE (StayEventStreamPublisher) para
+     * notificar la entrada de vehiculo en tiempo real (SSE-04).
+     */
+    public CheckInUseCase(StayPersistence stayPersistence,
+                          StayVehiclePort vehiclePort,
+                          StaySpotPort spotPort,
+                          StayTariffPort tariffPort,
+                          StayTicketPort ticketPort,
+                          StayEventStreamPublisher eventStreamPublisher,
+                          StayDTOFactory stayDTOFactory,
+                          Clock clock) {
         this.stayPersistence = stayPersistence;
         this.vehiclePort = vehiclePort;
         this.spotPort = spotPort;
         this.tariffPort = tariffPort;
         this.ticketPort = ticketPort;
+        this.eventStreamPublisher = eventStreamPublisher;
         this.stayDTOFactory = stayDTOFactory;
         this.clock = clock;
     }
+
 
     /**
      * @throws VehicleDeactivatedException  el vehiculo esta dado de baja (RN-11)
@@ -161,6 +186,8 @@ public class CheckInUseCase {
             //    de abajo libera la plaza que acabamos de ocupar.
             Stay saved = stayPersistence.save(stay);
 
+            publishStayCreatedEventQuietly(saved, plate);
+
             EntryTicketDTO entryTicket = new EntryTicketDTO(
                     ticket.ticketId(), ticket.barCode(), ticket.issuedAt());
 
@@ -208,11 +235,34 @@ public class CheckInUseCase {
         }
     }
 
+    private void publishStayCreatedEventQuietly(Stay stay, String plate) {
+        if (eventStreamPublisher == null) {
+            return;
+        }
+        StayCreatedEvent event = StayCreatedEvent.of(
+                stay.getId(),
+                stay.getVehicleId(),
+                stay.getVehicleType(),
+                stay.getSpotId(),
+                stay.getTariffId(),
+                plate,
+                stay.getCheckIn(),
+                clock.instant());
+
+        try {
+            eventStreamPublisher.publish(event);
+            log.info("StayCreatedEvent publicado por SSE para la estancia {}", stay.getId());
+        } catch (RuntimeException e) {
+            log.warn("No se pudo reenviar StayCreatedEvent por SSE para la estancia {}", stay.getId(), e);
+        }
+    }
+
     /**
      * Normaliza la matricula a mayusculas y sin espacios. Las lecturas de camara y
      * el tecleo manual del totem (CB-01) llegan con formatos distintos, e IN-01 exige
      * que la matricula identifique al vehiculo de forma univoca.
      */
+
     private static String normalizePlate(String plate) {
         if (plate == null || plate.isBlank()) {
             throw new InvalidStayException("La matricula es obligatoria para el check-in");

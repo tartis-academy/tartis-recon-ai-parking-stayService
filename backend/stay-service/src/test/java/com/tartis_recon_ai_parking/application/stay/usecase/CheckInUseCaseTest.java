@@ -2,7 +2,9 @@ package com.tartis_recon_ai_parking.application.stay.usecase;
 
 import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
@@ -71,6 +73,9 @@ class CheckInUseCaseTest {
     @Mock
     private StayTicketPort ticketPort;
 
+    @Mock
+    private StayEventStreamPublisher eventStreamPublisher;
+
     private CheckInUseCase useCase;
 
     private UUID vehicleId;
@@ -83,7 +88,7 @@ class CheckInUseCaseTest {
         spotId = UUID.randomUUID();
         tariffId = UUID.randomUUID();
         useCase = new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort,
-                new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
+                eventStreamPublisher, new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     /** Emisión de ticket por defecto para los caminos que llegan a persistir la estancia. */
@@ -123,7 +128,10 @@ class CheckInUseCaseTest {
         assertEquals(ticketId, result.getEntryTicket().getTicketId());
         assertEquals("BC-0001", result.getEntryTicket().getBarCode());
         assertEquals(NOW, result.getEntryTicket().getIssuedAt());
+
+        verify(eventStreamPublisher).publish(any(StayCreatedEvent.class));
     }
+
 
     @Test
     @DisplayName("ocupa plaza del tipo que resuelve vehicle-service, no el detectado (CA2)")
