@@ -1,6 +1,8 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.eventstream;
 
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
+import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -62,6 +64,21 @@ class SseEmitterRegistryTest {
         SseEmitterRegistry empty = new SseEmitterRegistry(1_800_000L);
         empty.publish(event);
     }
+
+    @Test
+    @DisplayName("publish(StayCreatedEvent) emite sin lanzar excepcion")
+    void publishStayCreatedEventDoesNotThrow() {
+        registry.subscribe();
+
+        StayCreatedEvent event = StayCreatedEvent.of(
+                UUID.randomUUID(), UUID.randomUUID(), VehicleType.CAR,
+                UUID.randomUUID(), UUID.randomUUID(), "1234ABC",
+                Instant.now(), Instant.now());
+
+
+        assertDoesNotThrow(() -> registry.publish(event));
+    }
+
 
     @Test
     @DisplayName("publish() sobre un emitter ya completado no rompe el broadcast y lo descarta")
