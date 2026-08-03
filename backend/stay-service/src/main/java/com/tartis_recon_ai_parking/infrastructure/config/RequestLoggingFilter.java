@@ -81,11 +81,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
      */
     private static final List<String> EXCLUDED_PREFIXES = List.of(
             "/actuator/health",
-            // SecurityConfig.SSE_PATH. Se repite el literal en vez de
-            // referenciar la constante para no acoplar este filtro, que es
-            // identico en los cinco servicios, a una clase que solo existe
-            // aqui con esa constante.
-            "/v1/events",
+            SecurityConfig.SSE_PATH,
             "/openapi.yml",
             "/swagger-ui",
             "/v3/api-docs");

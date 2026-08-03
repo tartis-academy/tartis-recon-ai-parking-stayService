@@ -254,6 +254,10 @@ paths:
 
         Browsers' native EventSource cannot set the Authorization header, so
         the JWT is also accepted as the `access_token` query parameter.
+
+        Today ONLY check-out emits an SSE event (`stay_updated`). Check-in does
+        not produce one yet, so integrators must not assume entry events are
+        covered (see docs/adr/0001).
       parameters:
         - name: access_token
           in: query
@@ -265,7 +269,18 @@ paths:
             type: string
       responses:
         '200':
-          description: text/event-stream connection established
+          description: >
+            text/event-stream connection established. On connect the server
+            sends `event:connected` with `data:ok`, then a `:heartbeat` comment
+            line every few seconds to keep proxies from closing the connection.
+
+            The only domain event is `event:stay_updated`, whose `data:` line is
+            the JSON of StayClosedEvent:
+            `eventId` (uuid), `type` (string, always "StayClosedEvent"),
+            `version` (string, always "v1"), `occurredAt` (date-time) and
+            `data` with `stayId` (uuid), `spotId` (uuid), `plate` (string),
+            `entryDate` (date-time), `exitDate` (date-time) and
+            `totalAmount` (number).
           content:
             text/event-stream:
               schema:
