@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output;
 
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
@@ -37,8 +38,9 @@ import java.util.stream.Collectors;
  *   <li><b>400</b> — matricula vacia / tipo de vehiculo invalido / validacion de campos
  *       / matricula rechazada por vehicle-service (formato invalido)</li>
  *   <li><b>404</b> — estancia inexistente (consultas)</li>
- *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05)
- *       o sin tarifa activa configurada (IN-08)</li>
+ *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05),
+ *       sin tarifa activa configurada (IN-08), o conflicto entre dos operaciones
+ *       simultaneas sobre la misma estancia</li>
  *   <li><b>422</b> — vehiculo dado de baja (RN-11)</li>
  *   <li><b>503</b> — un servicio externo (spot/tariff/ticket/vehicle) no responde
  *       o falla por un motivo que no es de negocio</li>
@@ -64,6 +66,25 @@ public class CustomizedExceptionAdapter {
     @ExceptionHandler(DuplicateActiveStayException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateStay(DuplicateActiveStayException ex,
                                                              HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * Condiciones de carrera: dos operaciones simultaneas sobre la misma
+     * estancia y esta llego la segunda (tipicamente un doble check-out).
+     *
+     * <p>409 y no 500 porque no se ha roto nada: la primera de las dos si se
+     * completo, y lo unico que ha pasado es que este cambio se descarta para no
+     * pisarla. Al operario del totem le sirve mas "esta salida ya se ha
+     * registrado, consulta el estado" que "error inesperado".
+     */
+    @ExceptionHandler(ConcurrentStayModificationException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentModification(ConcurrentStayModificationException ex,
+                                                                      HttpServletRequest request) {
+        // Se registra en el log aunque se responda 409: son sucesos raros y
+        // saber cada cuanto ocurren de verdad es lo que permite decidir si hace
+        // falta algo mas fuerte (bloqueo pesimista, idempotencia por cabecera).
+        log.warn("Conflicto de concurrencia en {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 

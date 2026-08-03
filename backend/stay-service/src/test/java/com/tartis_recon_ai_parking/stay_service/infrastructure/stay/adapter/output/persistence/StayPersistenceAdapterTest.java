@@ -4,6 +4,8 @@ import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.domain.stay.Stay;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
+import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.persistence.StayEntity;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.persistence.StayPersistenceAdapter;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.persistence.StayPersistenceMapper;
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -73,14 +77,60 @@ class StayPersistenceAdapterTest {
     @Test
     void save_ShouldPersistAndReturnStay() {
         when(mapper.toEntity(stayDomain)).thenReturn(stayEntity);
-        when(repository.save(stayEntity)).thenReturn(stayEntity);
+        when(repository.saveAndFlush(stayEntity)).thenReturn(stayEntity);
         when(mapper.toDomain(stayEntity)).thenReturn(stayDomain);
 
         Stay result = adapter.save(stayDomain);
 
         assertNotNull(result);
         assertEquals(stayId, result.getId());
-        verify(repository).save(stayEntity);
+        // saveAndFlush y no save: el flush tiene que ocurrir dentro del try para
+        // poder traducir la violacion de integridad. Con save(), Hibernate podria
+        // retrasar el SQL hasta el commit y la excepcion escaparia sin traducir.
+        verify(repository).saveAndFlush(stayEntity);
+    }
+
+    // ------------------------------------------------------------------
+    // Condiciones de carrera: traduccion de los conflictos de la BD a
+    // excepciones de dominio. La carrera de verdad se prueba con hilos y
+    // Postgres real en StayConcurrencyTest; esto cubre solo el mapeo.
+    // ------------------------------------------------------------------
+
+    @Test
+    void save_ShouldTranslateActiveStayIndexViolation_ToDuplicateActiveStay() {
+        when(mapper.toEntity(stayDomain)).thenReturn(stayEntity);
+        when(repository.saveAndFlush(stayEntity)).thenThrow(new DataIntegrityViolationException(
+                "could not execute statement",
+                new RuntimeException("ERROR: duplicate key value violates unique constraint"
+                        + " \"ux_stays_one_active_per_vehicle\"")));
+
+        DuplicateActiveStayException ex = assertThrows(DuplicateActiveStayException.class,
+                () -> adapter.save(stayDomain));
+
+        assertTrue(ex.getMessage().contains(vehicleId.toString()));
+    }
+
+    @Test
+    void save_ShouldRethrowOtherIntegrityViolations_SoRealBugsStaySurfaced() {
+        when(mapper.toEntity(stayDomain)).thenReturn(stayEntity);
+        when(repository.saveAndFlush(stayEntity)).thenThrow(new DataIntegrityViolationException(
+                "ERROR: null value in column \"tariff_id\" violates not-null constraint"));
+
+        // Un NOT NULL incumplido es un bug nuestro, no un conflicto de negocio:
+        // debe seguir saliendo como 500 y no disfrazarse de 409.
+        assertThrows(DataIntegrityViolationException.class, () -> adapter.save(stayDomain));
+    }
+
+    @Test
+    void save_ShouldTranslateOptimisticLockFailure_ToConcurrentStayModification() {
+        when(mapper.toEntity(stayDomain)).thenReturn(stayEntity);
+        when(repository.saveAndFlush(stayEntity))
+                .thenThrow(new OptimisticLockingFailureException("Row was updated by another transaction"));
+
+        ConcurrentStayModificationException ex = assertThrows(ConcurrentStayModificationException.class,
+                () -> adapter.save(stayDomain));
+
+        assertTrue(ex.getMessage().contains(stayId.toString()));
     }
 
     @Test

@@ -21,6 +21,43 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 
+/**
+ * Salida de vehiculo (HU-02): cierra la estancia en curso, calcula el importe y
+ * publica el cierre para que ticket-service y spot-service reaccionen.
+ *
+ * <h2>Condiciones de carrera</h2>
+ *
+ * <p>Entre leer la estancia y guardarla cerrada hay una llamada HTTP a
+ * tariff-service. En esa ventana cabe un segundo check-out del mismo vehiculo
+ * (doble pulsacion en el totem, reintento tras timeout, dos operarios). Sin
+ * proteccion, los dos leen la estancia en IN_PROGRESS, los dos la dan por buena
+ * y pasan tres cosas:
+ *
+ * <ol>
+ *   <li>la segunda escritura pisa a la primera (<em>lost update</em>): si el
+ *       reloj avanzo entre ambas, el importe cobrado no es el que se calculo;</li>
+ *   <li>se publican <b>dos</b> {@code StayClosedEvent}, asi que ticket-service
+ *       emite dos tickets de salida para la misma estancia;</li>
+ *   <li>spot-service libera la plaza dos veces. La segunda liberacion es la
+ *       peligrosa: si entre medias entro otro coche a esa misma plaza, queda
+ *       marcada como libre con un vehiculo dentro y se le asignara a un
+ *       tercero.</li>
+ * </ol>
+ *
+ * <p>Lo cierra el bloqueo optimista de {@code StayEntity}: la version leida
+ * viaja dentro del propio {@link Stay} hasta el {@code save}, y el UPDATE lleva
+ * un {@code WHERE version = ?} que la segunda peticion ya no cumple. El
+ * adaptador de persistencia lo traduce a
+ * {@link com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException}
+ * (409).
+ *
+ * <p><b>El orden de los dos ultimos pasos es lo que hace que esto funcione.</b>
+ * Guardar va antes que publicar, asi que la peticion que pierde la carrera
+ * revienta en el {@code save} y no llega nunca al {@code publish}. Si el evento
+ * se publicara primero, el bloqueo optimista no serviria de nada: el segundo
+ * ticket de salida y la segunda liberacion de plaza ya se habrian ido por el
+ * broker antes de que la base de datos tuviera ocasion de decir que no.
+ */
 public class CheckOutUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(CheckOutUseCase.class);
@@ -64,12 +101,21 @@ public class CheckOutUseCase {
         // misma respuesta.
         BigDecimal amount = tariffPort.calculateAmount(stay.getVehicleType(), totalMinutes);
 
+        // finish() arrastra la version que traia la estancia leida: es lo que
+        // permite que el UPDATE detecte si otro check-out se ha adelantado.
         Stay finished = stay.finish(checkOut, amount);
+
+        // Si perdemos la carrera, aqui salta ConcurrentStayModificationException
+        // y la ejecucion termina: no se publica nada. Ver el javadoc de la clase.
         Stay saved = stayPersistence.save(finished);
 
-        // Publicamos DESPUES de guardar: el check-out ya es valido en BD, el
-        // evento es un efecto secundario. Si falla la publicacion NO
-        // deshacemos el check-out (ver publishStayClosedEventQuietly).
+        // Publicamos DESPUES de guardar, y este orden es deliberado por dos
+        // motivos distintos:
+        //   - el check-out ya es valido en BD, el evento es un efecto
+        //     secundario: si falla la publicacion NO deshacemos el check-out
+        //     (ver publishStayClosedEventQuietly);
+        //   - y es lo que impide que un doble check-out publique dos eventos,
+        //     porque el segundo ni siquiera llega hasta aqui.
         publishStayClosedEventQuietly(saved, plate);
 
         // exitTicketId ya no se conoce al responder: se genera al consumir

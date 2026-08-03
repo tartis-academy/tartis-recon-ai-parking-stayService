@@ -38,9 +38,13 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # Los tests corren en H2 en memoria (perfil "test"), sin Postgres externo,
-      # asi que se ejecutan en el propio job. jacoco-maven-plugin (pom.xml) genera
-      # target/site/jacoco/jacoco.xml con la cobertura para que la lea SonarCloud.
+      # Casi todos los tests corren en H2 en memoria (perfil "test"), sin
+      # Postgres externo. La excepcion es StayConcurrencyTest, que levanta una
+      # Postgres con Testcontainers: el indice unico parcial que prueba no
+      # existe en H2, asi que sobre H2 el test pasaria en verde sin probar nada.
+      # No hace falta configurar nada aqui, ubuntu-latest ya trae Docker.
+      # jacoco-maven-plugin (pom.xml) genera target/site/jacoco/jacoco.xml con
+      # la cobertura para que la lea SonarCloud.
       - name: Build
         run: ./mvnw -B verify
 

@@ -42,6 +42,30 @@ import java.util.UUID;
  * comprueba y reserva de forma atomica (CA1, CA3, CA5 de HU-01). Si no hay plaza,
  * lanza {@link com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException}
  * (RN-01): se deniega el acceso, la barrera sigue cerrada y se informa (CA-01).
+ *
+ * <h2>Condiciones de carrera</h2>
+ *
+ * <p>Entre el paso 3 (comprobar si el vehiculo ya esta dentro) y el paso 7
+ * (guardar la estancia) hay una ventana de milisegundos ocupada por tres
+ * llamadas HTTP. Si en esa ventana entra un segundo check-in de la misma
+ * matricula —dos operarios en dos totems, o el mismo totem reintentando tras un
+ * timeout— los dos pasan la comprobacion del paso 3, porque ninguno ha guardado
+ * todavia. Resultado sin proteccion: el mismo coche dentro dos veces, ocupando
+ * dos plazas fisicas y con dos tickets de entrada validos.
+ *
+ * <p>Ninguna comprobacion en Java puede cerrar esa ventana, porque stay-service
+ * corre con varias replicas y cada una tiene su propia JVM. La cierra el indice
+ * unico parcial {@code ux_stays_one_active_per_vehicle} de la base de datos
+ * (ver {@code V2__race_conditions.sql}), que es el unico punto que ven todas las
+ * replicas a la vez. {@code StayPersistenceAdapter} traduce esa violacion a
+ * {@link DuplicateActiveStayException}, la misma excepcion que lanza la
+ * comprobacion del paso 3, asi que el cliente recibe el mismo 409 tanto si el
+ * duplicado se detecta pronto como si se detecta en el ultimo momento.
+ *
+ * <p><b>La comprobacion del paso 3 no sobra</b> por tener el indice detras:
+ * resuelve el caso normal (el coche lleva dentro un rato) sin ocupar una plaza
+ * ni emitir un ticket para luego tener que deshacerlo. El indice cubre solo el
+ * caso raro de las dos peticiones simultaneas.
  */
 public class CheckInUseCase {
 
@@ -92,6 +116,10 @@ public class CheckInUseCase {
         }
 
         // 3. IN-02 / IN-03 / CB-05: un vehiculo no puede entrar dos veces.
+        //    Esta comprobacion resuelve el caso normal y evita ocupar plaza y
+        //    emitir ticket para nada. El caso de dos check-in simultaneos NO lo
+        //    cubre (ver "Condiciones de carrera" en el javadoc de la clase): de
+        //    ese se encarga el indice unico de la base de datos en el paso 7.
         if (stayPersistence.existsByVehicleIdAndStatus(vehicle.vehicleId(), StayStatus.IN_PROGRESS)) {
             throw new DuplicateActiveStayException(
                     "El vehiculo con matricula " + plate
@@ -103,6 +131,9 @@ public class CheckInUseCase {
         UUID spotId = spotPort.occupySpot(vehicle.vehicleType());
 
         // 5. A partir de aqui la plaza esta OCCUPIED: cualquier fallo debe liberarla.
+        //    El ticket se declara fuera del try porque el manejo del doble
+        //    check-in necesita saber, desde el catch, si llego a emitirse.
+        StayTicketPort.EntryTicketInfo ticket = null;
         try {
             UUID tariffId = tariffPort.getActiveTariffId(vehicle.vehicleType());
 
@@ -121,15 +152,36 @@ public class CheckInUseCase {
             //    caido, la estancia nunca llega a guardarse: el catch solo tiene
             //    que liberar la plaza y no queda una estancia huerfana en BD que
             //    bloquee reintentos futuros del mismo vehiculo (IN-02, CB-05).
-            StayTicketPort.EntryTicketInfo ticket =
-                    ticketPort.issueEntryTicket(stay.getId(), plate, stay.getCheckIn());
+            ticket = ticketPort.issueEntryTicket(stay.getId(), plate, stay.getCheckIn());
 
+            // 7. Ultima linea de defensa contra el doble check-in. Si otra
+            //    peticion de la misma matricula gano la carrera mientras
+            //    haciamos las llamadas de arriba, el indice unico parcial de la
+            //    BD hace saltar aqui una DuplicateActiveStayException. El catch
+            //    de abajo libera la plaza que acabamos de ocupar.
             Stay saved = stayPersistence.save(stay);
 
             EntryTicketDTO entryTicket = new EntryTicketDTO(
                     ticket.ticketId(), ticket.barCode(), ticket.issuedAt());
 
             return new CheckInResultDTO(stayDTOFactory.create(saved), entryTicket);
+
+        } catch (DuplicateActiveStayException e) {
+            // Caso raro y con una consecuencia que conviene dejar por escrito:
+            // el ticket de entrada del paso 6 YA se ha emitido y aqui no se
+            // puede anular (ticket-service no expone esa operacion). Queda un
+            // ticket huerfano, asociado a una estancia que no existe.
+            //
+            // Se asume a proposito. La alternativa —guardar antes de emitir el
+            // ticket— cambiaria el fallo raro por uno peor y mas frecuente: si
+            // ticket-service esta caido quedaria una estancia en BD sin ticket,
+            // bloqueando todos los reintentos de ese vehiculo por IN-02. Un
+            // ticket suelto no bloquea nada; solo ensucia el listado.
+            log.warn("Doble check-in simultaneo de la matricula {}: gana la primera peticion."
+                    + " El ticket de entrada {} queda huerfano (sin estancia asociada) y requiere"
+                    + " limpieza manual", plate, ticket != null ? ticket.ticketId() : "(no emitido)", e);
+            releaseQuietly(spotId, e);
+            throw e;
 
         } catch (RuntimeException e) {
             releaseQuietly(spotId, e);
