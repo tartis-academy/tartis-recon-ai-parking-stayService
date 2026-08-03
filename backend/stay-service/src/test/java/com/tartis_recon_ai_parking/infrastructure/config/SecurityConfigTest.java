@@ -35,12 +35,25 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("Debe resolver el token del query param en la ruta SSE, que es la unica que no puede mandar cabeceras")
+    @DisplayName("Debe resolver el token del query param access_token en la ruta SSE")
     void shouldResolveTokenFromQueryParameterOnSseRoute() {
         String token = resolver.resolve(peticionSse("my-sse-jwt-token"));
 
         assertThat(token).isEqualTo("my-sse-jwt-token");
     }
+
+    @Test
+    @DisplayName("Debe resolver el token del query param jwt en la ruta SSE (SSE-08)")
+    void shouldResolveTokenFromJwtQueryParameterOnSseRoute() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", SecurityConfig.SSE_PATH);
+        request.setRequestURI(SecurityConfig.SSE_PATH);
+        request.setParameter("jwt", "my-jwt-query-token");
+
+        String token = resolver.resolve(request);
+
+        assertThat(token).isEqualTo("my-jwt-query-token");
+    }
+
 
     /**
      * Este es el test que de verdad protege el cambio de GW-06/SSE-08: antes
