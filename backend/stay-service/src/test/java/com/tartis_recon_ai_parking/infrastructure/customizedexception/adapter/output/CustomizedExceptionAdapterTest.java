@@ -197,6 +197,7 @@ class CustomizedExceptionAdapterTest {
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 
+    @Test
     @DisplayName("handleCircuitOpen: circuito abierto (RES-05) devuelve 503, no 500")
     void handleCircuitOpen_buildsServiceUnavailable() {
         // Circuito real forzado a OPEN para obtener una CallNotPermittedException
