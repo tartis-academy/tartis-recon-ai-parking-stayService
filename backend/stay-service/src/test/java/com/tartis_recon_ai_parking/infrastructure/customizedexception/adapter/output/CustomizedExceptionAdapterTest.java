@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output;
 
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
@@ -98,6 +99,24 @@ class CustomizedExceptionAdapterTest {
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals("No hay tarifa activa configurada para CAR", response.getBody().message());
+    }
+
+    @Test
+    @DisplayName("handleConcurrentModification: un conflicto de concurrencia es 409, nunca 500")
+    void handleConcurrentModification_buildsConflict() {
+        ConcurrentStayModificationException ex = new ConcurrentStayModificationException(
+                "La estancia fue modificada por otra operacion simultanea",
+                new IllegalStateException("Row was updated by another transaction"));
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleConcurrentModification(ex, request);
+
+        // 409 y no 500: la operacion de la otra peticion si se completo, aqui
+        // solo se ha descartado este cambio para no pisarla.
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertEquals("La estancia fue modificada por otra operacion simultanea",
+                response.getBody().message());
+        assertEquals("/v1/stays/check-out", response.getBody().path());
     }
 
     @Test
