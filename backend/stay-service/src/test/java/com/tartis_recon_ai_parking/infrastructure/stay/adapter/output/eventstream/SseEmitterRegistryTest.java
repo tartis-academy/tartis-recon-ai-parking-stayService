@@ -93,4 +93,17 @@ class SseEmitterRegistryTest {
         SseEmitterRegistry empty = new SseEmitterRegistry(1_800_000L);
         empty.heartbeat();
     }
+
+    @Test
+    @DisplayName("heartbeat() sobre un emitter ya completado no rompe la ronda y lo descarta")
+    void heartbeatRemovesAlreadyCompletedEmitter() {
+        SseEmitter dead = registry.subscribe();
+        registry.subscribe();
+
+        dead.complete();
+        assertEquals(2, registry.activeCount());
+
+        assertDoesNotThrow(() -> registry.heartbeat());
+        assertEquals(1, registry.activeCount());
+    }
 }
