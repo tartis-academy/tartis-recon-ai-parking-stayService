@@ -380,6 +380,42 @@ class StayRestAdapterMvcTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar check-in sin token (401)")
+    void checkIn_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/v1/stays/check-in")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
+                .andExpect(status().isUnauthorized());
+        verify(checkInUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar check-out sin token (401)")
+    void checkOut_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/v1/stays/check-out")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"stayId\":\"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isUnauthorized());
+        verify(checkOutUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar consultar estancia por ID sin token (401)")
+    void getStayById_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/v1/stays/{stayId}", UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+        verify(getStayUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar listar estancias sin token (401)")
+    void listStays_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/v1/stays"))
+                .andExpect(status().isUnauthorized());
+        verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
+    }
+
     private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor adminJwt() {
         return jwt()
                 .jwt(j -> j
