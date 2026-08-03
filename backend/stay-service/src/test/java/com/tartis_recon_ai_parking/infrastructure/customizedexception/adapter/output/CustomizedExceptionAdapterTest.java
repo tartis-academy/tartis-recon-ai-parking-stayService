@@ -170,25 +170,6 @@ class CustomizedExceptionAdapterTest {
     }
 
     @Test
-    @DisplayName("handleCircuitOpen: circuito abierto (RES-05) devuelve 503, no 500")
-    void handleCircuitOpen_buildsServiceUnavailable() {
-        // Circuito real forzado a OPEN para obtener una CallNotPermittedException
-        // autentica, en vez de mockearla: es la misma excepcion que veria el
-        // check-out cuando el circuito de tariffService esta abierto.
-        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("tariffService");
-        circuitBreaker.transitionToOpenState();
-        CallNotPermittedException ex =
-                CallNotPermittedException.createCallNotPermittedException(circuitBreaker);
-        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
-
-        ResponseEntity<ErrorResponse> response = adapter.handleCircuitOpen(ex, request);
-
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-        assertEquals("/v1/stays/check-out", response.getBody().path());
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
-    }
-}
-    @Test
     @DisplayName("handleUnauthorized: traduce AuthenticationException a 401")
     void handleUnauthorized_buildsUnauthorized() {
         org.springframework.security.authentication.BadCredentialsException ex =
@@ -214,5 +195,23 @@ class CustomizedExceptionAdapterTest {
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertEquals("No tiene permisos para realizar esta acción.", response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @DisplayName("handleCircuitOpen: circuito abierto (RES-05) devuelve 503, no 500")
+    void handleCircuitOpen_buildsServiceUnavailable() {
+        // Circuito real forzado a OPEN para obtener una CallNotPermittedException
+        // autentica, en vez de mockearla: es la misma excepcion que veria el
+        // check-out cuando el circuito de tariffService esta abierto.
+        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("tariffService");
+        circuitBreaker.transitionToOpenState();
+        CallNotPermittedException ex =
+                CallNotPermittedException.createCallNotPermittedException(circuitBreaker);
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleCircuitOpen(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("/v1/stays/check-out", response.getBody().path());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
     }
 }
