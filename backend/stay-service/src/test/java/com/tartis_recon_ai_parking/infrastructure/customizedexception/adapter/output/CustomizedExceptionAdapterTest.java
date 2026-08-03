@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output;
 
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
@@ -101,6 +102,24 @@ class CustomizedExceptionAdapterTest {
     }
 
     @Test
+    @DisplayName("handleConcurrentModification: un conflicto de concurrencia es 409, nunca 500")
+    void handleConcurrentModification_buildsConflict() {
+        ConcurrentStayModificationException ex = new ConcurrentStayModificationException(
+                "La estancia fue modificada por otra operacion simultanea",
+                new IllegalStateException("Row was updated by another transaction"));
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleConcurrentModification(ex, request);
+
+        // 409 y no 500: la operacion de la otra peticion si se completo, aqui
+        // solo se ha descartado este cambio para no pisarla.
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertEquals("La estancia fue modificada por otra operacion simultanea",
+                response.getBody().message());
+        assertEquals("/v1/stays/check-out", response.getBody().path());
+    }
+
+    @Test
     @DisplayName("handleTariffServiceUnavailable: traduce el fallo de tariff-service a 503 con mensaje interpretable")
     void handleTariffServiceUnavailable_buildsServiceUnavailable() {
         TariffServiceException ex = new TariffServiceException(
@@ -145,6 +164,34 @@ class CustomizedExceptionAdapterTest {
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         assertEquals("No se pudo contactar con vehicle-service para consultar el vehiculo 1234ABC",
                 response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleUnauthorized: traduce AuthenticationException a 401")
+    void handleUnauthorized_buildsUnauthorized() {
+        org.springframework.security.authentication.BadCredentialsException ex =
+                new org.springframework.security.authentication.BadCredentialsException("Token no valido");
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleUnauthorized(ex, request);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("Token de autenticación ausente, inválido o caducado.", response.getBody().message());
+        assertEquals("/v1/stays/check-in", response.getBody().path());
+    }
+
+    @Test
+    @DisplayName("handleAccessDenied: traduce AccessDeniedException a 403")
+    void handleAccessDenied_buildsForbidden() {
+        org.springframework.security.access.AccessDeniedException ex =
+                new org.springframework.security.access.AccessDeniedException("Rol insuficiente");
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleAccessDenied(ex, request);
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals("No tiene permisos para realizar esta acción.", response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 }

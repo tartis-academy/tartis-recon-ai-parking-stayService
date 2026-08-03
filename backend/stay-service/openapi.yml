@@ -64,6 +64,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CheckInResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -74,8 +78,11 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >
-            No spots for the vehicle type (RN-01) or the vehicle already has an
-            IN_PROGRESS stay (IN-02, CB05)
+            No spots for the vehicle type (RN-01), or the vehicle already has an
+            IN_PROGRESS stay (IN-02, CB05). The second case also covers the race
+            where two simultaneous check-ins of the same plate reach the service
+            at once: only the first one wins, the loser gets this 409 and its
+            spot is released. Retrying will not help until the vehicle exits.
           content:
             application/json:
               schema:
@@ -116,6 +123,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CheckOutResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -126,7 +137,11 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: >
-            Stay is not IN_PROGRESS, or entry ticket already used (IN-21)
+            Stay is not IN_PROGRESS, or entry ticket already used (IN-21), or the
+            stay was closed by another concurrent request while this one was
+            calculating the amount. In the concurrent case the check-out DID
+            succeed (the other request completed it): the client should re-read
+            the stay instead of retrying, since a retry will return 404.
           content:
             application/json:
               schema:
@@ -156,6 +171,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StayResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Stay not found
           content:
@@ -185,6 +204,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StayResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: Stay not found
           content:
@@ -232,6 +255,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StayPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -490,6 +517,18 @@ components:
   responses:
     BadRequest:
       description: Invalid request (field validation)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Token ausente, inválido o caducado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: El token es válido pero el rol no autoriza la operación
       content:
         application/json:
           schema:

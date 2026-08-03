@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output;
 
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
@@ -37,8 +38,9 @@ import java.util.stream.Collectors;
  *   <li><b>400</b> — matricula vacia / tipo de vehiculo invalido / validacion de campos
  *       / matricula rechazada por vehicle-service (formato invalido)</li>
  *   <li><b>404</b> — estancia inexistente (consultas)</li>
- *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05)
- *       o sin tarifa activa configurada (IN-08)</li>
+ *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05),
+ *       sin tarifa activa configurada (IN-08), o conflicto entre dos operaciones
+ *       simultaneas sobre la misma estancia</li>
  *   <li><b>422</b> — vehiculo dado de baja (RN-11)</li>
  *   <li><b>503</b> — un servicio externo (spot/tariff/ticket/vehicle) no responde
  *       o falla por un motivo que no es de negocio</li>
@@ -64,6 +66,25 @@ public class CustomizedExceptionAdapter {
     @ExceptionHandler(DuplicateActiveStayException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateStay(DuplicateActiveStayException ex,
                                                              HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * Condiciones de carrera: dos operaciones simultaneas sobre la misma
+     * estancia y esta llego la segunda (tipicamente un doble check-out).
+     *
+     * <p>409 y no 500 porque no se ha roto nada: la primera de las dos si se
+     * completo, y lo unico que ha pasado es que este cambio se descarta para no
+     * pisarla. Al operario del totem le sirve mas "esta salida ya se ha
+     * registrado, consulta el estado" que "error inesperado".
+     */
+    @ExceptionHandler(ConcurrentStayModificationException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentModification(ConcurrentStayModificationException ex,
+                                                                      HttpServletRequest request) {
+        // Se registra en el log aunque se responda 409: son sucesos raros y
+        // saber cada cuanto ocurren de verdad es lo que permite decidir si hace
+        // falta algo mas fuerte (bloqueo pesimista, idempotencia por cabecera).
+        log.warn("Conflicto de concurrencia en {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
@@ -168,6 +189,28 @@ public class CustomizedExceptionAdapter {
     }
 
     /**
+     * HTTP 401 Unauthorized: El token de autenticación está ausente, es inválido o ha caducado.
+     * <p>
+     * Diagnóstico para el equipo: El problema reside en la forma en que el frontend envía el token de autenticación.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(AuthenticationException ex, HttpServletRequest request) {
+        log.warn("Autenticación fallida o token inválido en {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, "Token de autenticación ausente, inválido o caducado.", request);
+    }
+
+    /**
+     * HTTP 403 Forbidden: El token de autenticación es válido pero el usuario no posee el rol necesario.
+     * <p>
+     * Diagnóstico para el equipo: El problema reside en los roles configurados asignados a la identidad.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        log.warn("Acceso denegado en {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta acción.", request);
+    }
+
+    /**
      * Red de seguridad (IN-36): cualquier excepcion que no tenga un handler mas
      * especifico cae aqui en vez de escapar sin traducir hacia el manejo de
      * errores por defecto de Spring. Spring elige siempre el handler mas
@@ -180,10 +223,7 @@ public class CustomizedExceptionAdapter {
      * jamas vea una respuesta sin traducir (texto plano / stack trace crudo).
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) throws Exception {
-        if (ex instanceof AccessDeniedException || ex instanceof AuthenticationException) {
-            throw ex;
-        }
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Excepcion no controlada en {}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado", request);
     }
