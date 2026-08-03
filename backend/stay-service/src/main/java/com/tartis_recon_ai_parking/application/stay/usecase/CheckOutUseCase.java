@@ -5,6 +5,7 @@ import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayEventPublisher;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
@@ -29,6 +30,7 @@ public class CheckOutUseCase {
     private final StayVehiclePort vehiclePort;
     private final StayTariffPort tariffPort;
     private final StayEventPublisher eventPublisher;
+    private final StayEventStreamPublisher eventStreamPublisher;
     private final StayDTOFactory stayDTOFactory;
     private final Clock clock;
 
@@ -36,12 +38,14 @@ public class CheckOutUseCase {
                            StayVehiclePort vehiclePort,
                            StayTariffPort tariffPort,
                            StayEventPublisher eventPublisher,
+                           StayEventStreamPublisher eventStreamPublisher,
                            StayDTOFactory stayDTOFactory,
                            Clock clock) {
         this.stayPersistence = stayPersistence;
         this.vehiclePort = vehiclePort;
         this.tariffPort = tariffPort;
         this.eventPublisher = eventPublisher;
+        this.eventStreamPublisher = eventStreamPublisher;
         this.stayDTOFactory = stayDTOFactory;
         this.clock = clock;
     }
@@ -78,15 +82,16 @@ public class CheckOutUseCase {
     }
 
     private void publishStayClosedEventQuietly(Stay stay, String plate) {
+        StayClosedEvent event = StayClosedEvent.of(
+                stay.getId(),
+                stay.getSpotId(),
+                plate,
+                stay.getCheckIn(),
+                stay.getCheckOut(),
+                stay.getTotalAmount(),
+                clock.instant());
+
         try {
-            StayClosedEvent event = StayClosedEvent.of(
-                    stay.getId(),
-                    stay.getSpotId(),
-                    plate,
-                    stay.getCheckIn(),
-                    stay.getCheckOut(),
-                    stay.getTotalAmount(),
-                    clock.instant());
             eventPublisher.publish(event);
             log.info("StayClosedEvent publicado para la estancia {}", stay.getId());
         } catch (RuntimeException e) {
@@ -97,6 +102,13 @@ public class CheckOutUseCase {
             log.error("Check-out realizado pero no se pudo publicar StayClosedEvent para la estancia {}:"
                     + " ticket-service y spot-service no se enteraran de este cierre (requiere revision manual)",
                     stay.getId(), e);
+        }
+
+        try {
+            eventStreamPublisher.publish(event);
+        } catch (RuntimeException e) {
+            // Canal best-effort: no afecta al check-out ni a RabbitMQ.
+            log.warn("No se pudo reenviar StayClosedEvent por SSE para la estancia {}", stay.getId(), e);
         }
     }
 
