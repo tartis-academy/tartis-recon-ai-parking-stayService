@@ -7,13 +7,14 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.context.annotation.Profile;
 
@@ -39,6 +40,7 @@ public class SecurityConfig {
             .oauth2ResourceServer(oauth2 -> oauth2
                 .bearerTokenResolver(bearerTokenResolver())
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                .authenticationEntryPoint(bearerEntryPoint(resolver))
             )
             .exceptionHandling(eh -> eh
                 .accessDeniedHandler((request, response, ex) -> resolver.resolveException(request, response, null, ex))
@@ -105,6 +107,20 @@ public class SecurityConfig {
      * matcher y el efecto es que no se acepta el token por URL en ningun sitio,
      * que es el estado mas seguro posible.
      */
+
+    // Compone el BearerTokenAuthenticationEntryPoint por defecto (que fija el
+    // status y la cabecera WWW-Authenticate, RFC 6750) con la delegacion al
+    // resolver para que el cuerpo sea el ErrorResponse del adapter. Sin esto,
+    // el entry point del oauth2ResourceServer no emite la cabecera y el
+    // cliente no puede distinguir 401 (token caducado) de 403 (sin rol).
+    private AuthenticationEntryPoint bearerEntryPoint(HandlerExceptionResolver resolver) {
+        BearerTokenAuthenticationEntryPoint bearer = new BearerTokenAuthenticationEntryPoint();
+        return (request, response, ex) -> {
+            bearer.commence(request, response, ex);
+            resolver.resolveException(request, response, null, ex);
+        };
+    }
+
     @Bean
     BearerTokenResolver bearerTokenResolver() {
         DefaultBearerTokenResolver soloCabecera = new DefaultBearerTokenResolver();
