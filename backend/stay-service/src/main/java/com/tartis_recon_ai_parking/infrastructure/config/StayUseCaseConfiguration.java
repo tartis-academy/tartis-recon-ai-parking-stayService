@@ -2,6 +2,7 @@ package com.tartis_recon_ai_parking.infrastructure.config;
 
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayEventPublisher;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
@@ -53,9 +54,11 @@ public class StayUseCaseConfiguration {
                                     StayVehiclePort vehiclePort,
                                     StayTariffPort tariffPort,
                                     StayEventPublisher eventPublisher,
+                                    StayEventStreamPublisher eventStreamPublisher,
                                     StayDTOFactory stayDTOFactory,
                                     Clock clock) {
-        return new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, eventPublisher, stayDTOFactory, clock);
+        return new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, eventPublisher, eventStreamPublisher,
+                stayDTOFactory, clock);
     }
 
     /**

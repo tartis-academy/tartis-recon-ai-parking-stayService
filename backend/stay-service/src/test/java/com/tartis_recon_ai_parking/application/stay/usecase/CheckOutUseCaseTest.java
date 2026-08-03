@@ -5,6 +5,7 @@ import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayEventPublisher;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
@@ -56,6 +57,8 @@ class CheckOutUseCaseTest {
     private StayTariffPort tariffPort;
     @Mock
     private StayEventPublisher eventPublisher;
+    @Mock
+    private StayEventStreamPublisher eventStreamPublisher;
 
     private CheckOutUseCase useCase;
 
@@ -72,7 +75,7 @@ class CheckOutUseCaseTest {
         spotId = UUID.randomUUID();
         tariffId = UUID.randomUUID();
         checkIn = NOW.minus(90, ChronoUnit.MINUTES);
-        useCase = new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, eventPublisher,
+        useCase = new CheckOutUseCase(stayPersistence, vehiclePort, tariffPort, eventPublisher, eventStreamPublisher,
                 new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -113,6 +116,11 @@ class CheckOutUseCaseTest {
         assertEquals(checkIn, published.data().entryDate());
         assertEquals(NOW, published.data().exitDate());
         assertEquals(0, published.data().totalAmount().compareTo(new BigDecimal("3.00")));
+
+        // SSE-02: el mismo evento que va a RabbitMQ se reenvia por el stream SSE.
+        ArgumentCaptor<StayClosedEvent> streamCaptor = ArgumentCaptor.forClass(StayClosedEvent.class);
+        verify(eventStreamPublisher).publish(streamCaptor.capture());
+        assertEquals(published, streamCaptor.getValue());
     }
 
     @Test
@@ -127,7 +135,7 @@ class CheckOutUseCaseTest {
                 () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
 
         verify(stayPersistence, never()).save(any());
-        verifyNoInteractions(eventPublisher);
+        verifyNoInteractions(eventPublisher, eventStreamPublisher);
     }
 
     @Test
@@ -138,7 +146,7 @@ class CheckOutUseCaseTest {
         assertThrows(StayNotFoundException.class,
                 () -> useCase.execute(new StayCheckOutDTO(PLATE, null)));
 
-        verifyNoInteractions(stayPersistence, tariffPort, eventPublisher);
+        verifyNoInteractions(stayPersistence, tariffPort, eventPublisher, eventStreamPublisher);
     }
 
     @Test
@@ -147,7 +155,7 @@ class CheckOutUseCaseTest {
         assertThrows(InvalidStayException.class,
                 () -> useCase.execute(new StayCheckOutDTO("   ", null)));
 
-        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, eventPublisher);
+        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, eventPublisher, eventStreamPublisher);
     }
 
     @Test
@@ -156,7 +164,7 @@ class CheckOutUseCaseTest {
         assertThrows(InvalidStayException.class,
                 () -> useCase.execute(new StayCheckOutDTO(null, null)));
 
-        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, eventPublisher);
+        verifyNoInteractions(vehiclePort, stayPersistence, tariffPort, eventPublisher, eventStreamPublisher);
     }
 
     @Test
@@ -175,6 +183,27 @@ class CheckOutUseCaseTest {
 
         assertEquals(StayStatus.FINISHED, result.getStay().getStatus());
         verify(eventPublisher).publish(any(StayClosedEvent.class));
+        // El fallo de RabbitMQ no impide reenviar el evento por SSE: son canales independientes.
+        verify(eventStreamPublisher).publish(any(StayClosedEvent.class));
+    }
+
+    @Test
+    @DisplayName("Si el reenvio por SSE falla, se registra pero no se propaga: RabbitMQ ya recibio el evento")
+    void shouldSwallowEventStreamPublishFailure() {
+        when(vehiclePort.findByPlate(PLATE))
+                .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
+        when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(inProgressStay()));
+        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new IllegalStateException("sin clientes SSE conectados"))
+                .when(eventStreamPublisher).publish(any(StayClosedEvent.class));
+
+        CheckOutResultDTO result = useCase.execute(new StayCheckOutDTO(PLATE, null));
+
+        assertEquals(StayStatus.FINISHED, result.getStay().getStatus());
+        verify(eventPublisher).publish(any(StayClosedEvent.class));
+        verify(eventStreamPublisher).publish(any(StayClosedEvent.class));
     }
 
     // ------------------------------------------------------------------
