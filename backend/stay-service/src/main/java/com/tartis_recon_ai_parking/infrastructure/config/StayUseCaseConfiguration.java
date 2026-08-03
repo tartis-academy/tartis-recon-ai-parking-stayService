@@ -38,10 +38,12 @@ public class StayUseCaseConfiguration {
                                   StaySpotPort spotPort,
                                   StayTariffPort tariffPort,
                                   StayTicketPort ticketPort,
+                                  StayEventStreamPublisher eventStreamPublisher,
                                   StayDTOFactory stayDTOFactory,
                                   Clock clock) {
-        return new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort, stayDTOFactory, clock);
+        return new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort, eventStreamPublisher, stayDTOFactory, clock);
     }
+
 
     @Bean
     GetActiveStayUseCase getActiveStayUseCase(StayPersistence stayPersistence,
