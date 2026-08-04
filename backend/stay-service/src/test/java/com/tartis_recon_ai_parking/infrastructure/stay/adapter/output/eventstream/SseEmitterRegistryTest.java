@@ -1,7 +1,9 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.eventstream;
 
+import com.tartis_recon_ai_parking.application.stay.dto.SpotStatusChangedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
+import com.tartis_recon_ai_parking.application.stay.dto.TariffChangedEvent;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +100,33 @@ class SseEmitterRegistryTest {
 
         assertDoesNotThrow(() -> registry.publish(event));
         assertEquals(1, registry.activeCount());
+    }
+
+    @Test
+    @DisplayName("publish(TariffChangedEvent) emite sin lanzar excepcion (SSE-06)")
+    void publishTariffChangedEventDoesNotThrow() {
+        registry.subscribe();
+
+        TariffChangedEvent event = new TariffChangedEvent(
+                UUID.randomUUID(), "TariffChangedEvent", "v1", Instant.now(),
+                new TariffChangedEvent.TariffChangedData(
+                        UUID.randomUUID(), "Standard", VehicleType.CAR,
+                        new BigDecimal("0.05"), new BigDecimal("2.0"), true));
+
+        assertDoesNotThrow(() -> registry.publish(event));
+    }
+
+    @Test
+    @DisplayName("publish(SpotStatusChangedEvent) emite sin lanzar excepcion (SSE-06)")
+    void publishSpotStatusChangedEventDoesNotThrow() {
+        registry.subscribe();
+
+        SpotStatusChangedEvent event = new SpotStatusChangedEvent(
+                UUID.randomUUID(), "SpotStatusChangedEvent", "v1", Instant.now(),
+                new SpotStatusChangedEvent.SpotStatusChangedData(
+                        UUID.randomUUID(), VehicleType.CAR, "AVAILABLE"));
+
+        assertDoesNotThrow(() -> registry.publish(event));
     }
 
     @Test
