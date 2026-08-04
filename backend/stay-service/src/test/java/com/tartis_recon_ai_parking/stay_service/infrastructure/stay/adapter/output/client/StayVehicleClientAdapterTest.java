@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
@@ -159,6 +160,97 @@ void shouldCreateVehicleWhenNotFoundByPlate() {
     // THEN
     assertNotNull(vehicleInfo);
     assertEquals(expectedVehicleId, vehicleInfo.vehicleId());
+    server.verify();
+}
+
+@Test
+void shouldSendOptionalAttributesOnCreation() {
+    // GIVEN
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(UUID.randomUUID());
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.plate").value("1234ABC"))
+            .andExpect(jsonPath("$.type").value("CAR"))
+            .andExpect(jsonPath("$.brand").value("Seat"))
+            .andExpect(jsonPath("$.model").value("Ibiza"))
+            .andExpect(jsonPath("$.color").value("Rojo"))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    stayVehicleClientAdapter.getOrCreateVehicle(
+            "1234ABC", VehicleType.CAR, new VehicleAttributes("Seat", "Ibiza", "Rojo"));
+
+    // THEN
+    server.verify();
+}
+
+@Test
+void shouldOmitAbsentOrBlankAttributesOnCreation() {
+    // GIVEN
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(UUID.randomUUID());
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    // El totem manda "" en los campos que el operario no rellena; vehicle-service
+    // los rechazaria con 400, asi que no deben viajar.
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.plate").value("1234ABC"))
+            .andExpect(jsonPath("$.brand").doesNotExist())
+            .andExpect(jsonPath("$.model").doesNotExist())
+            .andExpect(jsonPath("$.color").doesNotExist())
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    stayVehicleClientAdapter.getOrCreateVehicle(
+            "1234ABC", VehicleType.CAR, new VehicleAttributes("  ", null, ""));
+
+    // THEN
+    server.verify();
+}
+
+@Test
+void shouldNotCreateVehicleWhenItAlreadyExists() {
+    // GIVEN
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(UUID.randomUUID());
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    stayVehicleClientAdapter.getOrCreateVehicle(
+            "1234ABC", VehicleType.CAR, new VehicleAttributes("Seat", "Ibiza", "Rojo"));
+
+    // THEN: server.verify() falla si se ha lanzado el POST de alta.
     server.verify();
 }
 
