@@ -6,6 +6,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.VehicleResponse;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -23,7 +24,9 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
     private final RestClient restClient;
 
     public StayVehicleClientAdapter(
-            RestClient.Builder builder,
+            // RES-06: builder con el read timeout propio de vehicle (proveedor
+            // externo mas lento), no el generico. Ver BeanConfiguration.
+            @Qualifier("vehicleRestClientBuilder") RestClient.Builder builder,
             @Value("${services.vehicle.url:http://vehicle-service:8080}") String vehicleServiceUrl
     ) {
         this.restClient = builder.baseUrl(vehicleServiceUrl).build();
