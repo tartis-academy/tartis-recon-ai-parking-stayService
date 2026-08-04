@@ -85,6 +85,30 @@ class EventStreamRestAdapterMvcTest {
     }
 
     @Test
+    @DisplayName("suscripcion con token en query param (?jwt=...) devuelve 200 (SSE-08b)")
+    void shouldAllowSubscriptionWithTokenInQueryParam() throws Exception {
+        when(registry.subscribe()).thenReturn(new SseEmitter());
+
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt
+                .withTokenValue("valid-jwt-token")
+                .header("alg", "none")
+                .claim("sub", UUID.randomUUID().toString())
+                .claim("realm_access", Map.of("roles", List.of("ADMIN")))
+                .build();
+
+        when(jwtDecoder.decode("valid-jwt-token")).thenReturn(jwt);
+
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .param("jwt", "valid-jwt-token")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(MockMvcResultMatchers.request().asyncStarted())
+                .andExpect(MockMvcResultMatchers.status().isOk());
+
+        verify(registry).subscribe();
+    }
+
+
+    @Test
     @DisplayName("Debe rechazar con 401 una peticion con token invalido por query param ?jwt")
     void shouldReturn401WhenInvalidJwtInQueryParam() throws Exception {
         when(jwtDecoder.decode("invalid-token"))
