@@ -4,7 +4,9 @@ import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckOutResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.EntryTicketDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckInUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
@@ -20,6 +22,7 @@ import com.tartis_recon_ai_parking.infrastructure.config.KeycloakRoleConverter;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.CustomizedExceptionAdapter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -35,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -106,6 +111,54 @@ class StayRestAdapterMvcTest {
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
                 .andExpect(jsonPath("$.entryTicket.ticketId").value(ticketId.toString()))
                 .andExpect(jsonPath("$.entryTicket.barCode").value("BC-0001"));
+    }
+
+    @Test
+    @DisplayName("los atributos opcionales del totem llegan al caso de uso (STAY-104)")
+    void checkIn_forwardsOptionalVehicleAttributes() throws Exception {
+        givenCheckInSucceeds();
+
+        mockMvc.perform(post("/v1/stays/check-in")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\","
+                                + "\"brand\":\"Seat\",\"model\":\"Ibiza\",\"color\":\"Rojo\"}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<StayCreateDTO> captor = ArgumentCaptor.forClass(StayCreateDTO.class);
+        verify(checkInUseCase).execute(captor.capture());
+
+        VehicleAttributes attributes = captor.getValue().getVehicleAttributes();
+        assertEquals("Seat", attributes.brand());
+        assertEquals("Ibiza", attributes.model());
+        assertEquals("Rojo", attributes.color());
+    }
+
+    @Test
+    @DisplayName("check-in sin atributos opcionales -> 201, atributos vacios (retrocompatibilidad)")
+    void checkIn_withoutOptionalAttributes_stillWorks() throws Exception {
+        givenCheckInSucceeds();
+
+        mockMvc.perform(post("/v1/stays/check-in")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<StayCreateDTO> captor = ArgumentCaptor.forClass(StayCreateDTO.class);
+        verify(checkInUseCase).execute(captor.capture());
+
+        assertTrue(
+                captor.getValue().getVehicleAttributes().isEmpty());
+    }
+
+    private void givenCheckInSucceeds() {
+        StayDTO dto = new StayDTO(
+                UUID.randomUUID(), UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(),
+                Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
+        EntryTicketDTO entryTicket = new EntryTicketDTO(
+                UUID.randomUUID(), "BC-0001", Instant.parse("2026-07-23T08:30:00Z"));
+        when(checkInUseCase.execute(any())).thenReturn(new CheckInResultDTO(dto, entryTicket));
     }
 
     @Test

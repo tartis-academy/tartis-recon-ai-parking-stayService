@@ -7,6 +7,7 @@ import com.tartis_recon_ai_parking.application.stay.dto.StayCheckOutDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayPageDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
@@ -34,7 +35,10 @@ public class StayRestMapper {
      * presente pero no reconocido es una peticion invalida (400), no un fallo interno.
      */
     public StayCreateDTO toCreateDTO(StayRequest request) {
-        return new StayCreateDTO(request.plate, parseVehicleType(request.vehicleType));
+        return new StayCreateDTO(
+                request.plate,
+                parseVehicleType(request.vehicleType),
+                new VehicleAttributes(request.brand, request.model, request.color));
     }
 
     /**
