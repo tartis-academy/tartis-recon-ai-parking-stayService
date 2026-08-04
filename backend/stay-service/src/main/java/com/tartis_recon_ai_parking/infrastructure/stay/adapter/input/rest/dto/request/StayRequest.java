@@ -8,4 +8,9 @@ public class StayRequest {
     public String plate;
 
     public String vehicleType;
+
+    // Solo se usan si la matricula no esta registrada todavia.
+    public String brand;
+    public String model;
+    public String color;
 }

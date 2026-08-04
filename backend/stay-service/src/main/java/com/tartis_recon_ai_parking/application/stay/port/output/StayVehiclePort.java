@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.application.stay.port.output;
 
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import java.util.Optional;
 import java.util.UUID;
@@ -7,8 +8,9 @@ import java.util.UUID;
 public interface StayVehiclePort {
     /**
      * Obtiene la información del vehículo o lo crea si no existe (auto-registration).
+     * Los atributos solo se envían en el alta; si el vehículo ya existe se ignoran.
      */
-    VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType);
+    VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType, VehicleAttributes attributes);
 
     /**
      * Busca el vehículo por matrícula sin crearlo. Vacío si no existe.
