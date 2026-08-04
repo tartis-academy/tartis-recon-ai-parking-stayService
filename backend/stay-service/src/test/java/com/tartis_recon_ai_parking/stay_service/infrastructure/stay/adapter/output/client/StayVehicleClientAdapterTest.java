@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.output.client;
 
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
@@ -56,7 +57,7 @@ void shouldGetOrCreateVehicle() {
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
-    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY);
 
     // THEN
     assertNotNull(vehicleInfo);
@@ -78,7 +79,7 @@ void shouldThrowVehicleServiceException_whenGetOrCreateVehicleGetFails() {
 
     // WHEN & THEN: no debe colarse la RestClientException cruda
     VehicleServiceException ex = assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     assertThat(ex.getCause()).isNotNull();
     server.verify();
 }
@@ -95,7 +96,7 @@ void shouldThrowVehicleServiceException_whenGetOrCreateVehiclePostFails() {
 
     // WHEN & THEN
     VehicleServiceException ex = assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     assertThat(ex.getCause()).isNotNull();
     server.verify();
 }
@@ -109,7 +110,7 @@ void shouldThrowInvalidStayException_whenPlateRejectedOnLookup() {
 
     // WHEN & THEN: dato de entrada invalido, no "servicio no disponible"
     assertThrows(InvalidStayException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
@@ -125,7 +126,7 @@ void shouldThrowInvalidStayException_whenPlateRejectedOnCreate() {
 
     // WHEN & THEN
     assertThrows(InvalidStayException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
@@ -153,7 +154,7 @@ void shouldCreateVehicleWhenNotFoundByPlate() {
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
-    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY);
 
     // THEN
     assertNotNull(vehicleInfo);
@@ -316,7 +317,7 @@ void shouldFallbackToRequestedTypeWhenResponseTypeMissing() {
 
     // WHEN
     StayVehiclePort.VehicleInfo vehicleInfo =
-            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.MOTORBIKE);
+            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.MOTORBIKE, VehicleAttributes.EMPTY);
 
     // THEN
     assertEquals(VehicleType.MOTORBIKE, vehicleInfo.vehicleType());
@@ -341,7 +342,7 @@ void shouldFallbackToRequestedPlateWhenResponsePlateMissing() {
 
     // WHEN
     StayVehiclePort.VehicleInfo vehicleInfo =
-            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY);
 
     // THEN
     assertEquals("1234ABC", vehicleInfo.plate());
@@ -361,7 +362,7 @@ void shouldThrowVehicleServiceException_whenLookupUnauthorized() {
             .andRespond(withRawStatus(401));
 
     VehicleServiceException ex = assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
 
     assertThat(ex.getMessage()).contains("credenciales");
     server.verify();
@@ -374,7 +375,7 @@ void shouldThrowVehicleServiceException_whenLookupForbidden() {
             .andRespond(withRawStatus(403));
 
     assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
@@ -388,7 +389,7 @@ void shouldThrowVehicleServiceException_whenCreateUnauthorized() {
             .andRespond(withRawStatus(401));
 
     assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
