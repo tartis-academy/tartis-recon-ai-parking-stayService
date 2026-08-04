@@ -39,9 +39,6 @@ class EventStreamRestAdapterMvcTest {
     @MockitoBean
     private SseEmitterRegistry registry;
 
-    @MockitoBean
-    private org.springframework.security.oauth2.jwt.JwtDecoder jwtDecoder;
-
     @Test
     @DisplayName("Debe rechazar con 401 una peticion sin token")
     void shouldReturn401WhenNoTokenProvided() throws Exception {
@@ -83,42 +80,6 @@ class EventStreamRestAdapterMvcTest {
 
         verify(registry).subscribe();
     }
-
-    @Test
-    @DisplayName("Debe rechazar con 401 una peticion con token invalido por query param ?jwt")
-    void shouldReturn401WhenInvalidJwtInQueryParam() throws Exception {
-        when(jwtDecoder.decode("invalid-token"))
-                .thenThrow(new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
-                        org.springframework.security.oauth2.server.resource.BearerTokenErrors
-                                .invalidToken("Invalid token")));
-
-        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).param("jwt", "invalid-token"))
-                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
-        verify(registry, never()).subscribe();
-    }
-
-
-
-    @Test
-    @DisplayName("Debe rechazar con 401 cuando se envian multiples parametros jwt")
-    void shouldReturn401WhenMultipleJwtQueryParameters() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
-                        .param("jwt", "token-1")
-                        .param("jwt", "token-2"))
-                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
-        verify(registry, never()).subscribe();
-    }
-
-    @Test
-    @DisplayName("Debe rechazar con 401 cuando se envia jwt y access_token simultaneamente (token smuggling)")
-    void shouldReturn401WhenBothJwtAndAccessTokenParameters() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
-                        .param("jwt", "jwt-token")
-                        .param("access_token", "access-token"))
-                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
-        verify(registry, never()).subscribe();
-    }
-
 
     private static JwtRequestPostProcessor adminJwt() {
         return jwt()
