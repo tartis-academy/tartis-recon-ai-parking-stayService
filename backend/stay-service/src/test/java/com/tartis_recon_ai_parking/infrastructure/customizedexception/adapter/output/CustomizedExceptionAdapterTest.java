@@ -273,7 +273,7 @@ class CustomizedExceptionAdapterTest {
 
     @Test
     @DisplayName("handleUnexpected: la red de seguridad devuelve 500 con mensaje generico y sin detalle interno")
-    void handleUnexpected_buildsGeneric500WithoutLeakingDetail() throws Exception {
+    void handleUnexpected_buildsGeneric500WithoutLeakingDetail() {
         when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
 
         ResponseEntity<ErrorResponse> response =
