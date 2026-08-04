@@ -48,8 +48,11 @@ public class CustomErrorController implements ErrorController {
 
         if (status.is5xxServerError()) {
             Object error = request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
-            log.error("Fallo no controlado por el advice en {} (via /error)", path,
-                    error instanceof Throwable t ? t : null);
+            if (error instanceof Throwable t) {
+                log.error("Fallo no controlado por el advice en {} (via /error)", path, t);
+            } else {
+                log.error("Fallo no controlado por el advice en {} (via /error)", path);
+            }
         }
 
         ErrorResponse body = new ErrorResponse(
