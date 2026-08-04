@@ -37,7 +37,6 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -233,7 +232,7 @@ class StayRestAdapterMvcTest {
         StayDTO dto = new StayDTO(
                 stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(),
                 Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
-        when(listStaysUseCase.execute(eq(StayStatus.IN_PROGRESS), eq(0), eq(20)))
+        when(listStaysUseCase.execute(StayStatus.IN_PROGRESS, 0, 20))
                 .thenReturn(new StayPageDTO(List.of(dto), 0, 20, 1L, 1));
 
         mockMvc.perform(get("/v1/stays")
@@ -253,7 +252,7 @@ class StayRestAdapterMvcTest {
     @Test
     @DisplayName("GET /v1/stays sin params -> 200 usando page=0 size=20 y sin filtro de status")
     void listStays_defaults_returns200() throws Exception {
-        when(listStaysUseCase.execute(eq(null), eq(0), eq(20)))
+        when(listStaysUseCase.execute(null, 0, 20))
                 .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
@@ -262,6 +261,100 @@ class StayRestAdapterMvcTest {
                 .andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(20));
+    }
+
+    // ==========================================
+    // ERRORS DE ENTRADA (400/405, escenarios de ruptura BD)
+    // ==========================================
+
+    @Test
+    @DisplayName("check-out sin matricula -> 400 por validacion @NotBlank (antes dependia del caso de uso)")
+    void checkOut_emptyPlate_returns400() throws Exception {
+        mockMvc.perform(post("/v1/stays/check-out")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+        verify(checkOutUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("check-in con matricula vacia -> 400 por validacion")
+    void checkIn_emptyPlate_returns400() throws Exception {
+        mockMvc.perform(post("/v1/stays/check-in")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+        verify(checkInUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays/{id} con id que no es UUID -> 400 (se escapo como 500)")
+    void getStay_invalidUuid_returns400() throws Exception {
+        mockMvc.perform(get("/v1/stays/no-es-un-uuid")
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays?status=INVENTADO -> 400 por enum invalido")
+    void listStays_invalidStatus_returns400() throws Exception {
+        mockMvc.perform(get("/v1/stays")
+                        .param("status", "INVENTADO")
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays?page=-1 -> 400 por paginacion invalida (lo valida el adaptador antes de la persistencia)")
+    void listStays_negativePage_returns400() throws Exception {
+        mockMvc.perform(get("/v1/stays")
+                        .param("page", "-1")
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Parametros de paginacion invalidos"));
+        verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays?size=0 -> 400 por paginacion invalida")
+    void listStays_zeroSize_returns400() throws Exception {
+        mockMvc.perform(get("/v1/stays")
+                        .param("size", "0")
+                        .with(adminJwt()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Parametros de paginacion invalidos"));
+        verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("GET /v1/stays?size=1000000 -> se recorta al tope (100) sin disparar una consulta enorme")
+    void listStays_hugeSize_capsAtMax() throws Exception {
+        when(listStaysUseCase.execute(null, 0, 100))
+                .thenReturn(new StayPageDTO(List.of(), 0, 100, 0L, 0));
+
+        mockMvc.perform(get("/v1/stays")
+                        .param("page", "0")
+                        .param("size", "1000000")
+                        .with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(100));
+    }
+
+    @Test
+    @DisplayName("PUT sobre /v1/stays (solo GET) -> 405")
+    void putOnGetOnlyEndpoint_returns405() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/v1/stays")
+                        .with(adminJwt()))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405));
     }
 
     // ==========================================
@@ -377,7 +470,7 @@ class StayRestAdapterMvcTest {
     @Test
     @DisplayName("OPERARIO: Debe permitir listar todas las estancias (200)")
     void shouldAllowListStaysForOperario() throws Exception {
-        when(listStaysUseCase.execute(eq(null), eq(0), eq(20)))
+        when(listStaysUseCase.execute(null, 0, 20))
                 .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
