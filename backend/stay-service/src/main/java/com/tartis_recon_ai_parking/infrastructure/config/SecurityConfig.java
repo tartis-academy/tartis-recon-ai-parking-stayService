@@ -81,19 +81,11 @@ public class SecurityConfig {
      * rutas las consume {@code fetch()}, que si puede mandar cabeceras, asi que
      * esa exposicion no compraba nada.
      *
-     * <p><strong>Sobre el nombre del parametro.</strong> Se usa
-     * {@code access_token}, que es el del RFC 6750 y el que lee
-     * {@link DefaultBearerTokenResolver}. Hoy los tres componentes usan nombres
-     * distintos y ninguno coincide: el front manda {@code ?token=}
-     * ({@code use-sse.ts}) y el plugin {@code jwt} de Kong espera {@code ?jwt=}
-     * por defecto. Al cerrar SSE-08 hay que alinear los tres:
-     * <ul>
-     *   <li>front: {@code token} -> {@code access_token}</li>
-     *   <li>kong.yml, route del SSE: {@code uri_param_names: ["access_token"]}</li>
-     * </ul>
-     * Se elige este y no otro porque es el unico con el que el resolver de
-     * Spring funciona de fabrica, incluida la deteccion de token smuggling
-     * (token por cabecera y por query a la vez), que va con test propio.
+     * <p><strong>Sobre el nombre del parametro (SSE-08 / SSE-08b).</strong>
+     * Se acepta tanto {@code ?jwt=<token>} (valor por defecto del plugin jwt en Kong
+     * mediante {@code uri_param_names}) como {@code ?access_token=<token>} (RFC 6750)
+     * en la ruta {@code GET /v1/events}.
+
      *
      * <p><strong>Mitigaciones que acompanan a esta excepcion:</strong>
      * <ul>

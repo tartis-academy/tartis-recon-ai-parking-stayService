@@ -81,6 +81,66 @@ class EventStreamRestAdapterMvcTest {
         verify(registry).subscribe();
     }
 
+    @Test
+    @DisplayName("suscripcion con token en query param (?jwt=...) devuelve 200 (SSE-08b)")
+    void shouldAllowSubscriptionWithTokenInQueryParam() throws Exception {
+        when(registry.subscribe()).thenReturn(new SseEmitter());
+
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt
+                .withTokenValue("valid-jwt-token")
+                .header("alg", "none")
+                .claim("sub", UUID.randomUUID().toString())
+                .claim("realm_access", Map.of("roles", List.of("ADMIN")))
+                .build();
+
+        when(jwtDecoder.decode("valid-jwt-token")).thenReturn(jwt);
+
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .param("jwt", "valid-jwt-token")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(MockMvcResultMatchers.request().asyncStarted())
+                .andExpect(MockMvcResultMatchers.status().isOk());
+
+        verify(registry).subscribe();
+    }
+
+
+    @Test
+    @DisplayName("Debe rechazar con 401 una peticion con token invalido por query param ?jwt")
+    void shouldReturn401WhenInvalidJwtInQueryParam() throws Exception {
+        when(jwtDecoder.decode("invalid-token"))
+                .thenThrow(new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
+                        org.springframework.security.oauth2.server.resource.BearerTokenErrors
+                                .invalidToken("Invalid token")));
+
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).param("jwt", "invalid-token"))
+                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
+        verify(registry, never()).subscribe();
+    }
+
+
+
+    @Test
+    @DisplayName("Debe rechazar con 401 cuando se envian multiples parametros jwt")
+    void shouldReturn401WhenMultipleJwtQueryParameters() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .param("jwt", "token-1")
+                        .param("jwt", "token-2"))
+                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
+        verify(registry, never()).subscribe();
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con 401 cuando se envia jwt y access_token simultaneamente (token smuggling)")
+    void shouldReturn401WhenBothJwtAndAccessTokenParameters() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .param("jwt", "jwt-token")
+                        .param("access_token", "access-token"))
+                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
+        verify(registry, never()).subscribe();
+    }
+
+
     private static JwtRequestPostProcessor adminJwt() {
         return jwt()
                 .jwt(j -> j
