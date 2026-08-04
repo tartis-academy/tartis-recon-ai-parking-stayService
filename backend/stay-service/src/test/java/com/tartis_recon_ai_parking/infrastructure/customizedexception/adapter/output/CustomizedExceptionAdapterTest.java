@@ -196,7 +196,7 @@ class CustomizedExceptionAdapterTest {
         ResponseEntity<ErrorResponse> response = adapter.handleUnauthorized(ex, request);
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
-        assertEquals("Token de autenticaciÃ³n ausente, invÃ¡lido o caducado.", response.getBody().message());
+        assertEquals("Token de autenticación ausente, inválido o caducado.", response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 
@@ -210,7 +210,7 @@ class CustomizedExceptionAdapterTest {
         ResponseEntity<ErrorResponse> response = adapter.handleAccessDenied(ex, request);
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        assertEquals("No tiene permisos para realizar esta acciÃ³n.", response.getBody().message());
+        assertEquals("No tiene permisos para realizar esta acción.", response.getBody().message());
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 
@@ -231,6 +231,8 @@ class CustomizedExceptionAdapterTest {
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
         assertEquals("/v1/stays/check-out", response.getBody().path());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
+    }
+
     // ============================================================
     // Rupturas de base de datos (escenarios de ruptura BD)
     // ============================================================
@@ -322,17 +324,6 @@ class CustomizedExceptionAdapterTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("Falta el parametro obligatorio 'plate'", response.getBody().message());
-    }
-
-    @Test
-    @DisplayName("handleIllegalArgument: page/size invalidos (PageRequest.of) -> 400")
-    void handleIllegalArgument_buildsBadRequest() {
-        when(request.getRequestURI()).thenReturn("/v1/stays");
-
-        ResponseEntity<ErrorResponse> response = adapter.handleIllegalArgument(new IllegalArgumentException("bad size"), request);
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Parametros de paginacion invalidos", response.getBody().message());
     }
 
     @Test

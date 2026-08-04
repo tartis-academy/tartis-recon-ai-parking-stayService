@@ -302,18 +302,6 @@ public class CustomizedExceptionAdapter {
                 "Falta el parametro obligatorio '" + ex.getParameterName() + "'", request);
     }
 
-    /**
-     * {@code page} negativo o {@code size} fuera de rango: {@code PageRequest.of}
-     * lanza {@code IllegalArgumentException}. Es entrada invalida del cliente,
-     * no un fallo interno (el tope maximo de {@code size} lo aplica el propio
-     * adaptador REST antes de llegar aqui).
-     */
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex,
-                                                               HttpServletRequest request) {
-        return build(HttpStatus.BAD_REQUEST, "Parametros de paginacion invalidos", request);
-    }
-
     /** Metodo HTTP incorrecto para la ruta (GET a un POST, etc.). */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
