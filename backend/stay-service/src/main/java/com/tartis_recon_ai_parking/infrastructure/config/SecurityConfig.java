@@ -132,15 +132,41 @@ public class SecurityConfig {
         DefaultBearerTokenResolver tambienQueryString = new DefaultBearerTokenResolver();
         tambienQueryString.setAllowUriQueryParameter(true);
 
-        // EventSource solo hace GET: restringir el metodo reduce la superficie
-        // sin coste. AntPathRequestMatcher no vale aqui: se elimino en Spring
-        // Security 7, que es la que trae Spring Boot 4.
         RequestMatcher rutaSse = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SSE_PATH);
 
-        return request -> rutaSse.matches(request)
-                ? tambienQueryString.resolve(request)
-                : soloCabecera.resolve(request);
+        return request -> {
+            if (!rutaSse.matches(request)) {
+                return soloCabecera.resolve(request);
+            }
+            String[] jwtValues = request.getParameterValues("jwt");
+            if (jwtValues != null && jwtValues.length > 0) {
+                if (jwtValues.length > 1) {
+                    throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
+                            org.springframework.security.oauth2.server.resource.BearerTokenErrors
+                                    .invalidRequest("Found multiple bearer tokens in the request"));
+                }
+                String jwtParam = jwtValues[0];
+                if (jwtParam != null && !jwtParam.isBlank()) {
+                    String headerToken = request.getHeader("Authorization");
+                    if (headerToken != null && headerToken.toLowerCase().startsWith("bearer ")) {
+                        throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
+                                org.springframework.security.oauth2.server.resource.BearerTokenErrors
+                                        .invalidRequest("Found multiple bearer tokens in the request"));
+                    }
+                    String[] accessTokenValues = request.getParameterValues("access_token");
+                    if (accessTokenValues != null && accessTokenValues.length > 0) {
+                        throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
+                                org.springframework.security.oauth2.server.resource.BearerTokenErrors
+                                        .invalidRequest("Found multiple bearer tokens in the request"));
+                    }
+                    return jwtParam;
+                }
+            }
+            return tambienQueryString.resolve(request);
+        };
+
     }
+
 
     // sin este converter, los roles de realm_access.roles nunca llegan a
     // convertirse en GrantedAuthority con prefijo ROLE_ (ver KeycloakRoleConverter).

@@ -2,6 +2,7 @@ package com.tartis_recon_ai_parking.infrastructure.config;
 
 import com.tartis_recon_ai_parking.domain.stay.exception.NoAvailableSpotException;
 import com.tartis_recon_ai_parking.domain.stay.exception.SpotServiceException;
+import com.tartis_recon_ai_parking.domain.stay.exception.TariffServiceException;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -11,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 
 import java.util.concurrent.TimeUnit;
 
@@ -107,5 +110,73 @@ class CircuitBreakerBehaviourTest {
                 .isEqualTo(CircuitBreaker.State.CLOSED);
         assertThat(circuitBreakerRegistry.circuitBreaker("ticketService").getState())
                 .isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    /**
+     * RES-05 (ADR 002): tariffService es el circuito que protege el check-out.
+     * Config propia: ventana 10, minimo 5 llamadas, umbral 50 %. Con 5 fallos
+     * seguidos (100 % de fallo sobre el minimo) el circuito debe abrirse; a
+     * partir de ahi el check-out falla rapido (CallNotPermittedException -> 503)
+     * en vez de esperar el timeout contra tariff-service.
+     */
+    @Test
+    void tariffServiceShouldOpenAfterFiveConsecutiveFailures() {
+        CircuitBreaker tariff = circuitBreakerRegistry.circuitBreaker("tariffService");
+
+        assertThat(tariff.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // 4 fallos: aun por debajo del minimo de 5 llamadas, sin evidencia
+        // suficiente, el circuito sigue cerrado.
+        for (int i = 0; i < 4; i++) {
+            tariff.onError(0, TimeUnit.MILLISECONDS,
+                    new TariffServiceException("tariff-service no responde"));
+        }
+        assertThat(tariff.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // El quinto fallo alcanza el minimo con 100 % de error: se abre.
+        tariff.onError(0, TimeUnit.MILLISECONDS,
+                new TariffServiceException("tariff-service no responde"));
+        assertThat(tariff.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        // Con el circuito abierto, las llamadas ya no se permiten: esto es lo
+        // que en produccion se traduce en CallNotPermittedException.
+        assertThat(tariff.tryAcquirePermission()).isFalse();
+    }
+  
+    @Test
+    void shouldOpenVehicleServiceAfterReachingFailureThreshold() {
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("vehicleService");
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // 9 fallos: no alcanza el minimo de llamadas (10)
+        for (int i = 0; i < 9; i++) {
+            circuitBreaker.onError(0, TimeUnit.MILLISECONDS,
+                    new VehicleServiceException("vehicle-service no responde"));
+        }
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        // El decimo fallo abre el circuito
+        circuitBreaker.onError(0, TimeUnit.MILLISECONDS,
+                new VehicleServiceException("vehicle-service no responde"));
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+        assertThat(circuitBreaker.tryAcquirePermission()).isFalse();
+    }
+
+    /**
+     * RES-03: Una matricula invalida (InvalidStayException) es un fallo de cliente (400),
+     * no un fallo del servicio, por lo que el circuito debe permanecer CERRADO.
+     */
+    @Test
+    void shouldStayClosedWhenVehicleServiceReceivesInvalidStayException() {
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("vehicleService");
+
+        for (int i = 0; i < 30; i++) {
+            circuitBreaker.onError(0, TimeUnit.MILLISECONDS,
+                    new InvalidStayException("matricula invalida"));
+        }
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(circuitBreaker.tryAcquirePermission()).isTrue();
     }
 }

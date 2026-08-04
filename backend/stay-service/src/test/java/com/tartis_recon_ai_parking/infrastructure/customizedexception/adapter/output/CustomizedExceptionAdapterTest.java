@@ -8,6 +8,8 @@ import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -195,3 +197,4 @@ class CustomizedExceptionAdapterTest {
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 }
+
