@@ -187,7 +187,7 @@ class CustomizedExceptionAdapterTest {
         assertEquals("/v1/stays/check-out", response.getBody().path());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
     }
-}
+
     @Test
     @DisplayName("handleUnauthorized: traduce AuthenticationException a 401")
     void handleUnauthorized_buildsUnauthorized() {
@@ -216,3 +216,4 @@ class CustomizedExceptionAdapterTest {
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 }
+
