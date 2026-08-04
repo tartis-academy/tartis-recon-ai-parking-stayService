@@ -7,7 +7,6 @@ import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.VehicleResponse;
 
-import org.springframework.beans.factory.annotation.Qualifier;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 
@@ -30,9 +29,7 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
     private static final String CIRCUIT_BREAKER_NAME = "vehicleService";
 
     public StayVehicleClientAdapter(
-            // RES-06: builder con el read timeout propio de vehicle (proveedor
-            // externo mas lento), no el generico. Ver BeanConfiguration.
-            @Qualifier("vehicleRestClientBuilder") RestClient.Builder builder,
+            RestClient.Builder builder,
             @Value("${services.vehicle.url:http://vehicle-service:8080}") String vehicleServiceUrl
     ) {
         this.restClient = builder.baseUrl(vehicleServiceUrl).build();
