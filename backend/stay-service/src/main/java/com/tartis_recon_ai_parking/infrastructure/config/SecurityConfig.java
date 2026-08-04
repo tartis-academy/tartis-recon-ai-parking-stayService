@@ -35,6 +35,7 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health/**").permitAll()
+                .requestMatchers("/error").permitAll()
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
@@ -59,6 +60,19 @@ public class SecurityConfig {
      * {@code stay-service-events-route} de {@code kong/kong.yml}.
      */
     public static final String SSE_PATH = "/v1/events";
+
+    // Compone el BearerTokenAuthenticationEntryPoint por defecto (que fija el
+    // status y la cabecera WWW-Authenticate, RFC 6750) con la delegacion al
+    // resolver para que el cuerpo sea el ErrorResponse del adapter. Sin esto,
+    // el entry point del oauth2ResourceServer no emite la cabecera y el
+    // cliente no puede distinguir 401 (token caducado) de 403 (sin rol).
+    private AuthenticationEntryPoint bearerEntryPoint(HandlerExceptionResolver resolver) {
+        BearerTokenAuthenticationEntryPoint bearer = new BearerTokenAuthenticationEntryPoint();
+        return (request, response, ex) -> {
+            bearer.commence(request, response, ex);
+            resolver.resolveException(request, response, null, ex);
+        };
+    }
 
     /**
      * GW-06 / SSE-08 - el token por query string se acepta SOLO en la ruta del
@@ -94,28 +108,16 @@ public class SecurityConfig {
      *   <li>{@link RequestLoggingFilter} no registra la query string en ninguna
      *       ruta, y ademas excluye esta del log de acceso.</li>
      *   <li>En Kong, la route del SSE declara su propio {@code file-log} con
-     *       {@code custom_fields_by_lua} redactando {@code request.uri},
-     *       {@code request.url} y {@code request.querystring}: el serializer
-     *       redacta la cabecera {@code Authorization} de oficio, pero NO la
-     *       query string. Lo exige {@code scripts/ci/validate_kong.py}.</li>
+     *       {@code custom_fields_by_lua} sobre los CUATRO campos del serializer
+     *       que arrastran la query string: {@code request.uri},
+     *       {@code request.url}, {@code request.querystring} y
+     *       {@code upstream_uri}. El serializer redacta la cabecera
+     *       {@code Authorization} de oficio, pero NO la query string. Lo exige
+     *       {@code scripts/ci/validate_kong.py}.</li>
      *   <li>El token del stream deberia ser de vida corta. Sigue pendiente: hoy
      *       es el mismo token de sesion que usa el resto del front.</li>
      * </ul>
      */
-
-    // Compone el BearerTokenAuthenticationEntryPoint por defecto (que fija el
-    // status y la cabecera WWW-Authenticate, RFC 6750) con la delegacion al
-    // resolver para que el cuerpo sea el ErrorResponse del adapter. Sin esto,
-    // el entry point del oauth2ResourceServer no emite la cabecera y el
-    // cliente no puede distinguir 401 (token caducado) de 403 (sin rol).
-    private AuthenticationEntryPoint bearerEntryPoint(HandlerExceptionResolver resolver) {
-        BearerTokenAuthenticationEntryPoint bearer = new BearerTokenAuthenticationEntryPoint();
-        return (request, response, ex) -> {
-            bearer.commence(request, response, ex);
-            resolver.resolveException(request, response, null, ex);
-        };
-    }
-
     @Bean
     BearerTokenResolver bearerTokenResolver() {
         DefaultBearerTokenResolver soloCabecera = new DefaultBearerTokenResolver();

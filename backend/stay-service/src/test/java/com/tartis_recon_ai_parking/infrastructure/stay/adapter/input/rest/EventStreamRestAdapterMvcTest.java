@@ -84,6 +84,32 @@ class EventStreamRestAdapterMvcTest {
         verify(registry).subscribe();
     }
 
+    // Unico test que recorre la cadena real (resolver -> decoder -> @PreAuthorize):
+    // los demas happy path usan post-processors, que inyectan la Authentication y
+    // se saltan el bearerTokenResolver.
+    @Test
+    @DisplayName("Debe abrir el stream con un token valido por query param ?access_token")
+    void shouldAllowSubscriptionWithTokenInAccessTokenQueryParam() throws Exception {
+        when(registry.subscribe()).thenReturn(new SseEmitter());
+
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt
+                .withTokenValue("valid-access-token")
+                .header("alg", "none")
+                .claim("sub", UUID.randomUUID().toString())
+                .claim("realm_access", Map.of("roles", List.of("ADMIN")))
+                .build();
+
+        when(jwtDecoder.decode("valid-access-token")).thenReturn(jwt);
+
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .param("access_token", "valid-access-token")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(MockMvcResultMatchers.request().asyncStarted())
+                .andExpect(MockMvcResultMatchers.status().isOk());
+
+        verify(registry).subscribe();
+    }
+
     @Test
     @DisplayName("Debe rechazar con 401 una peticion con token invalido por query param ?access_token")
     void shouldReturn401WhenInvalidTokenInQueryParam() throws Exception {

@@ -43,13 +43,12 @@ una estancia (check-out). Trae:
   `occurredAt`, `data` con `stayId`, `spotId`, `plate`, `entryDate`,
   `exitDate`, `totalAmount`).
 
-Los navegadores no pueden mandar cabecera `Authorization` en `EventSource` (API nativa de JavaScript),
-así que el JWT también se acepta por parámetro de query: `?access_token=<token>`, y solo ese nombre.
-Es el del RFC 6750, el que manda el frontend (`use-sse.ts`) y el que declara la route
-`stay-service-events-route` de `kong/kong.yml` en el repo de infra. `?jwt=` (el nombre por defecto
-del plugin `jwt` de Kong) **no** se acepta: obligaría a reimplementar a mano la detección de token
-smuggling que el resolver de Spring ya trae para `access_token`.
+Los navegadores no pueden mandar cabecera `Authorization` en `EventSource`,
+así que el JWT también se acepta como query param `access_token` — y solo con ese
+nombre, el del RFC 6750. Es el que manda el frontend (`use-sse.ts`) y el que declara
+la route `stay-service-events-route` de `kong/kong.yml`. `?jwt=` (el default del
+plugin `jwt` de Kong) no autentica: un segundo nombre obliga a reimplementar a mano
+la detección de token smuggling que Spring ya trae para `access_token`.
 
-### Riesgo asumido y mitigación (SSE-08 / GW-06)
-- **Riesgo asumido:** Transmitir tokens en la URL expone el JWT a ser registrado en el historial del navegador o en proxies intermedios.
-- **Mitigación aplicada:** Se restringe la aceptación del token por URL **exclusivamente** al método `GET` en la ruta `/v1/events` (`SecurityConfig.java`). Adicionalmente, `RequestLoggingFilter` omite la query string de los logs de acceso en el backend, y el logger de Kong redacta la URL para impedir filtraciones de tokens en logs.
+Detalle completo (contrato, roles, límites) en `openapi.yml` (path
+`/events`) y en `docs/adr/0001-sse-endpoint-en-stay-service.md`.
