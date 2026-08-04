@@ -8,6 +8,7 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.C
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.CalculateAmountResponse;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.TariffResponse;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -56,7 +57,14 @@ public class StayTariffClientAdapter implements StayTariffPort {
         return tariffs.get(0).id();
     }
 
+    // RES-05 (decision A, ADR 002): rechazar la salida si tariff-service no
+    // esta disponible. NO se define fallbackMethod a proposito: cuando el
+    // circuito esta OPEN queremos que Resilience4j lance CallNotPermittedException
+    // y que el check-out falle rapido, en vez de devolver un importe inventado.
+    // Esa excepcion la traduce a 503 el CustomizedExceptionAdapter (IN-36).
+    // El nombre "tariffService" coincide con la instancia de application.yml.
     @Override
+    @CircuitBreaker(name = "tariffService")
     public BigDecimal calculateAmount(VehicleType vehicleType, long totalMinutes) {
         CalculateAmountResponse response;
         try {
