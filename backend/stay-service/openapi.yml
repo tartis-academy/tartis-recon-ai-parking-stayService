@@ -364,6 +364,21 @@ components:
           description: >
             Required only if the vehicle is not registered (auto-registration).
             If it already exists, it is resolved via StayVehiclePort.
+        brand:
+          type: string
+          example: "Seat"
+          description: >
+            Only used on auto-registration: forwarded to vehicle-service when the
+            plate is not registered yet. Ignored if the vehicle already exists.
+            Blank is treated as absent; vehicle-service then defaults it.
+        model:
+          type: string
+          example: "Ibiza"
+          description: Same handling as brand.
+        color:
+          type: string
+          example: "Rojo"
+          description: Same handling as brand.
 
     EntryTicket:
       type: object
