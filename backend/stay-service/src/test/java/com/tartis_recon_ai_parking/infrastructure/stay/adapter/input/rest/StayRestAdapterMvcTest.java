@@ -311,32 +311,27 @@ class StayRestAdapterMvcTest {
     }
 
     @Test
-    @DisplayName("GET /v1/stays?page=-1 -> 400 por paginacion invalida (lo rechaza PageRequest.of)")
+    @DisplayName("GET /v1/stays?page=-1 -> 400 por paginacion invalida (lo valida el adaptador antes de la persistencia)")
     void listStays_negativePage_returns400() throws Exception {
-        // Con el caso de uso mockeado no hay repositorio real; el 400 lo lanza
-        // PageRequest.of en el adaptador de persistencia real, aqui se simula
-        // esa misma IllegalArgumentException para comprobar el handler.
-        when(listStaysUseCase.execute(eq(null), eq(-1), eq(20)))
-                .thenThrow(new IllegalArgumentException("Page index must not be less than zero"));
-
         mockMvc.perform(get("/v1/stays")
                         .param("page", "-1")
                         .with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Parametros de paginacion invalidos"));
+        verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
     }
 
     @Test
     @DisplayName("GET /v1/stays?size=0 -> 400 por paginacion invalida")
     void listStays_zeroSize_returns400() throws Exception {
-        when(listStaysUseCase.execute(eq(null), eq(0), eq(0)))
-                .thenThrow(new IllegalArgumentException("Page size must not be less than one"));
-
         mockMvc.perform(get("/v1/stays")
                         .param("size", "0")
                         .with(adminJwt()))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Parametros de paginacion invalidos"));
+        verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
     }
 
     @Test

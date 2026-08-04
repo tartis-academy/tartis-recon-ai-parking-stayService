@@ -308,17 +308,6 @@ class CustomizedExceptionAdapterTest {
     }
 
     @Test
-    @DisplayName("handleIllegalArgument: page/size invalidos (PageRequest.of) -> 400")
-    void handleIllegalArgument_buildsBadRequest() {
-        when(request.getRequestURI()).thenReturn("/v1/stays");
-
-        ResponseEntity<ErrorResponse> response = adapter.handleIllegalArgument(new IllegalArgumentException("bad size"), request);
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Parametros de paginacion invalidos", response.getBody().message());
-    }
-
-    @Test
     @DisplayName("handleMethodNotSupported: metodo HTTP incorrecto -> 405")
     void handleMethodNotSupported_buildsMethodNotAllowed() {
         HttpRequestMethodNotSupportedException ex = new HttpRequestMethodNotSupportedException("GET", List.of("POST"));

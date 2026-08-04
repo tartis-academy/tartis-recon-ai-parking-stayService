@@ -9,6 +9,7 @@ import com.tartis_recon_ai_parking.application.stay.usecase.CheckOutUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.GetStayUseCase;
 import com.tartis_recon_ai_parking.application.stay.usecase.ListStaysUseCase;
 import com.tartis_recon_ai_parking.domain.stay.StayStatus;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayCheckOutRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.request.StayRequest;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.input.rest.dto.response.CheckInResponse;
@@ -46,9 +47,11 @@ public class StayRestAdapter {
      * Tope maximo del parametro {@code size} del listado (escenarios de ruptura
      * BD). {@code size=1000000} dispararia una consulta enorme y, encima, el
      * N+1 contra vehicle-service que {@code ListStaysUseCase} documenta como
-     * aceptable solo porque "size" esta acotado. Valores por encima se recortan;
-     * valores invalidos (0 o negativos) siguen llegando a {@code PageRequest.of},
-     * que los rechaza con 400 via {@code CustomizedExceptionAdapter}.
+     * aceptable solo porque "size" esta acotado. Valores por encima se recortan
+     * (documentado en el openapi.yml); valores invalidos (page < 0 o size < 1)
+     * se rechazan con 400 en {@link #listStays} antes de llegar a la
+     * persistencia, donde {@code PageRequest.of} los rechazaria igualmente pero
+     * con una excepcion sin traducir.
      */
     static final int MAX_LIST_SIZE = 100;
 
@@ -120,6 +123,9 @@ public class StayRestAdapter {
             @RequestParam(required = false) StayStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        if (page < 0 || size < 1) {
+            throw new InvalidStayException("Parametros de paginacion invalidos");
+        }
         int cappedSize = Math.min(size, MAX_LIST_SIZE);
         StayPageDTO result = listStaysUseCase.execute(status, page, cappedSize);
         return ResponseEntity.ok(mapper.toStayPageResponse(result));
