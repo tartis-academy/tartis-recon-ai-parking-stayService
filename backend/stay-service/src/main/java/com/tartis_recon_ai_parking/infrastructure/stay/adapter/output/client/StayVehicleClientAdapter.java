@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
@@ -16,6 +17,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,7 +36,7 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
 
     @Override
  @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "getOrCreateVehicleFallback")
-    public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
+    public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType, VehicleAttributes attributes) {
         VehicleResponse response;
 
         try {
@@ -49,9 +51,7 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
             try {
                 response = restClient.post()
                         .uri("/v1/vehicles")
-                        .body(Map.of(
-                                "plate", plate,
-                                "type", vehicleType.name()))
+                        .body(buildCreateBody(plate, vehicleType, attributes))
                         .retrieve()
                         .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
             } catch (HttpClientErrorException creationRejected) {
@@ -81,7 +81,29 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
         return toVehicleInfo(response, plate, vehicleType);
     }
 
-    private VehicleInfo getOrCreateVehicleFallback(String plate, VehicleType vehicleType, Throwable t) {
+    // Map.of no admite valores null, y los atributos son opcionales por contrato.
+    private static Map<String, Object> buildCreateBody(
+            String plate, VehicleType vehicleType, VehicleAttributes attributes) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("plate", plate);
+        body.put("type", vehicleType.name());
+
+        if (attributes != null) {
+            putIfPresent(body, "brand", attributes.brand());
+            putIfPresent(body, "model", attributes.model());
+            putIfPresent(body, "color", attributes.color());
+        }
+        return body;
+    }
+
+    private static void putIfPresent(Map<String, Object> body, String key, String value) {
+        if (value != null) {
+            body.put(key, value);
+        }
+    }
+
+    private VehicleInfo getOrCreateVehicleFallback(
+            String plate, VehicleType vehicleType, VehicleAttributes attributes, Throwable t) {
         if (t instanceof CallNotPermittedException) {
             throw new VehicleServiceException(
                     "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "

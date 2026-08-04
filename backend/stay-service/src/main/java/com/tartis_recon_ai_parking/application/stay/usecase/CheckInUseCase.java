@@ -132,7 +132,8 @@ public class CheckInUseCase {
 
         // 1. Resolver el vehiculo. El puerto hace el GET /v1/vehicles/plate/{plate}
         //    y, si no existe (404), lo da de alta con POST /v1/vehicles.
-        VehicleInfo vehicle = vehiclePort.getOrCreateVehicle(plate, command.getVehicleType());
+        VehicleInfo vehicle = vehiclePort.getOrCreateVehicle(
+                plate, command.getVehicleType(), command.getVehicleAttributes());
 
         // 2. RN-11: un vehiculo dado de baja no puede entrar. Antes de tocar plaza.
         if (!vehicle.active()) {
