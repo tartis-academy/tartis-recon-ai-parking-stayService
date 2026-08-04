@@ -14,6 +14,7 @@ import com.tartis_recon_ai_parking.domain.stay.exception.VehicleDeactivatedExcep
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -147,6 +148,26 @@ public class CustomizedExceptionAdapter {
     public ResponseEntity<ErrorResponse> handleTariffServiceUnavailable(TariffServiceException ex,
                                                                         HttpServletRequest request) {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
+    /**
+     * RES-05 (ADR 002): el circuito de un servicio externo esta OPEN, asi que
+     * Resilience4j corta la llamada antes de intentarla y lanza
+     * CallNotPermittedException. Sin este handler caeria en la red de seguridad
+     * generica y el operador recibiria un 500 "Ha ocurrido un error inesperado"
+     * en vez de un 503 interpretable (IN-36). Se traduce igual que un servicio
+     * caido: 503, porque para el cliente es lo mismo (el destino no responde),
+     * solo que aqui el fallo es inmediato en vez de esperar al timeout.
+     */
+    @ExceptionHandler(CallNotPermittedException.class)
+    public ResponseEntity<ErrorResponse> handleCircuitOpen(CallNotPermittedException ex,
+                                                           HttpServletRequest request) {
+        log.warn("Circuito abierto, llamada no permitida en {}: {}",
+                request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "El servicio de tarifas no está disponible temporalmente; "
+                        + "la salida no puede completarse. Reintente en unos instantes.",
+                request);
     }
 
 
