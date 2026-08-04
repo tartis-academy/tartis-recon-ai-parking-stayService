@@ -56,7 +56,7 @@ public class SecurityConfig {
     /**
      * Ruta del stream de eventos. Es el path que ya asume el frontend
      * ({@code src/lib/use-sse.ts}) y se corresponde con la route
-     * {@code stay-service-events-route} reservada en {@code kong/kong.yml}.
+     * {@code stay-service-events-route} de {@code kong/kong.yml}.
      */
     public static final String SSE_PATH = "/v1/events";
 
@@ -80,36 +80,27 @@ public class SecurityConfig {
      * rutas las consume {@code fetch()}, que si puede mandar cabeceras, asi que
      * esa exposicion no compraba nada.
      *
-     * <p><strong>Sobre el nombre del parametro.</strong> Se usa
-     * {@code access_token}, que es el del RFC 6750 y el que lee
-     * {@link DefaultBearerTokenResolver}. Hoy los tres componentes usan nombres
-     * distintos y ninguno coincide: el front manda {@code ?token=}
-     * ({@code use-sse.ts}) y el plugin {@code jwt} de Kong espera {@code ?jwt=}
-     * por defecto. Al cerrar SSE-08 hay que alinear los tres:
-     * <ul>
-     *   <li>front: {@code token} -> {@code access_token}</li>
-     *   <li>kong.yml, route del SSE: {@code uri_param_names: ["access_token"]}</li>
-     * </ul>
-     * Se elige este y no otro porque es el unico con el que el resolver de
-     * Spring funciona de fabrica, incluida la deteccion de token smuggling
-     * (token por cabecera y por query a la vez), que va con test propio.
+     * <p><strong>Sobre el nombre del parametro.</strong> {@code access_token} y
+     * solo ese, en los tres componentes de la cadena: el front lo manda asi
+     * ({@code use-sse.ts}) y la route {@code stay-service-events-route} de
+     * {@code kong/kong.yml} declara {@code uri_param_names: ["access_token"]}.
+     * Es el nombre del RFC 6750 y el unico que {@link DefaultBearerTokenResolver}
+     * lee de fabrica, con su deteccion de token smuggling incluida. NO se acepta
+     * {@code ?jwt=} (el default del plugin de Kong): un segundo nombre obliga a
+     * reimplementar a mano esa deteccion y no lo usa ningun cliente.
      *
      * <p><strong>Mitigaciones que acompanan a esta excepcion:</strong>
      * <ul>
      *   <li>{@link RequestLoggingFilter} no registra la query string en ninguna
      *       ruta, y ademas excluye esta del log de acceso.</li>
-     *   <li>En Kong, la route del SSE necesita su propio {@code file-log} con
+     *   <li>En Kong, la route del SSE declara su propio {@code file-log} con
      *       {@code custom_fields_by_lua} redactando {@code request.uri},
      *       {@code request.url} y {@code request.querystring}: el serializer
      *       redacta la cabecera {@code Authorization} de oficio, pero NO la
      *       query string. Lo exige {@code scripts/ci/validate_kong.py}.</li>
-     *   <li>El token del stream deberia ser de vida corta. Fuera del alcance de
-     *       GW-06; anotado para SSE-08.</li>
+     *   <li>El token del stream deberia ser de vida corta. Sigue pendiente: hoy
+     *       es el mismo token de sesion que usa el resto del front.</li>
      * </ul>
-     *
-     * <p>Nota: mientras el endpoint SSE no exista, ninguna peticion casa con el
-     * matcher y el efecto es que no se acepta el token por URL en ningun sitio,
-     * que es el estado mas seguro posible.
      */
 
     // Compone el BearerTokenAuthenticationEntryPoint por defecto (que fija el
@@ -134,37 +125,9 @@ public class SecurityConfig {
 
         RequestMatcher rutaSse = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, SSE_PATH);
 
-        return request -> {
-            if (!rutaSse.matches(request)) {
-                return soloCabecera.resolve(request);
-            }
-            String[] jwtValues = request.getParameterValues("jwt");
-            if (jwtValues != null && jwtValues.length > 0) {
-                if (jwtValues.length > 1) {
-                    throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
-                            org.springframework.security.oauth2.server.resource.BearerTokenErrors
-                                    .invalidRequest("Found multiple bearer tokens in the request"));
-                }
-                String jwtParam = jwtValues[0];
-                if (jwtParam != null && !jwtParam.isBlank()) {
-                    String headerToken = request.getHeader("Authorization");
-                    if (headerToken != null && headerToken.toLowerCase().startsWith("bearer ")) {
-                        throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
-                                org.springframework.security.oauth2.server.resource.BearerTokenErrors
-                                        .invalidRequest("Found multiple bearer tokens in the request"));
-                    }
-                    String[] accessTokenValues = request.getParameterValues("access_token");
-                    if (accessTokenValues != null && accessTokenValues.length > 0) {
-                        throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
-                                org.springframework.security.oauth2.server.resource.BearerTokenErrors
-                                        .invalidRequest("Found multiple bearer tokens in the request"));
-                    }
-                    return jwtParam;
-                }
-            }
-            return tambienQueryString.resolve(request);
-        };
-
+        return request -> rutaSse.matches(request)
+                ? tambienQueryString.resolve(request)
+                : soloCabecera.resolve(request);
     }
 
 

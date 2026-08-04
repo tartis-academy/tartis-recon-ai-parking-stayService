@@ -44,7 +44,11 @@ una estancia (check-out). Trae:
   `exitDate`, `totalAmount`).
 
 Los navegadores no pueden mandar cabecera `Authorization` en `EventSource` (API nativa de JavaScript),
-así que el JWT también se acepta por parámetro de query mediante `jwt` (`?jwt=<token>`) o `access_token` (`?access_token=<token>`).
+así que el JWT también se acepta por parámetro de query: `?access_token=<token>`, y solo ese nombre.
+Es el del RFC 6750, el que manda el frontend (`use-sse.ts`) y el que declara la route
+`stay-service-events-route` de `kong/kong.yml` en el repo de infra. `?jwt=` (el nombre por defecto
+del plugin `jwt` de Kong) **no** se acepta: obligaría a reimplementar a mano la detección de token
+smuggling que el resolver de Spring ya trae para `access_token`.
 
 ### Riesgo asumido y mitigación (SSE-08 / GW-06)
 - **Riesgo asumido:** Transmitir tokens en la URL expone el JWT a ser registrado en el historial del navegador o en proxies intermedios.

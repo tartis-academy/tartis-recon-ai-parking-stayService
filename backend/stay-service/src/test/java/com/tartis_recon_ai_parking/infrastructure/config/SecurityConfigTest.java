@@ -42,16 +42,20 @@ class SecurityConfigTest {
         assertThat(token).isEqualTo("my-sse-jwt-token");
     }
 
+    /**
+     * SSE-08: {@code access_token} es el unico nombre aceptado. {@code jwt}, el
+     * default del plugin de Kong, no vale: la route del SSE en {@code kong.yml}
+     * declara {@code uri_param_names: ["access_token"]} y el front manda ese
+     * mismo nombre, asi que un segundo alias solo anadiria superficie.
+     */
     @Test
-    @DisplayName("Debe resolver el token del query param jwt en la ruta SSE (SSE-08)")
-    void shouldResolveTokenFromJwtQueryParameterOnSseRoute() {
+    @DisplayName("Debe IGNORAR el query param jwt en la ruta SSE")
+    void shouldIgnoreJwtQueryParameterOnSseRoute() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", SecurityConfig.SSE_PATH);
         request.setRequestURI(SecurityConfig.SSE_PATH);
         request.setParameter("jwt", "my-jwt-query-token");
 
-        String token = resolver.resolve(request);
-
-        assertThat(token).isEqualTo("my-jwt-query-token");
+        assertThat(resolver.resolve(request)).isNull();
     }
 
 
@@ -135,26 +139,12 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("Debe lanzar OAuth2AuthenticationException cuando se envian multiples parametros jwt")
-    void shouldThrowWhenMultipleJwtParametersPresent() {
+    @DisplayName("Debe lanzar OAuth2AuthenticationException cuando se envian multiples parametros access_token")
+    void shouldThrowWhenMultipleAccessTokenParametersPresent() {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", SecurityConfig.SSE_PATH);
         request.setRequestURI(SecurityConfig.SSE_PATH);
-        request.addParameter("jwt", "token-1");
-        request.addParameter("jwt", "token-2");
-
-        org.junit.jupiter.api.Assertions.assertThrows(
-            org.springframework.security.oauth2.core.OAuth2AuthenticationException.class,
-            () -> resolver.resolve(request)
-        );
-    }
-
-    @Test
-    @DisplayName("Debe lanzar OAuth2AuthenticationException cuando se envia jwt y access_token a la vez")
-    void shouldThrowWhenBothJwtAndAccessTokenParametersPresent() {
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", SecurityConfig.SSE_PATH);
-        request.setRequestURI(SecurityConfig.SSE_PATH);
-        request.setParameter("jwt", "jwt-token");
-        request.setParameter("access_token", "access-token");
+        request.addParameter("access_token", "token-1");
+        request.addParameter("access_token", "token-2");
 
         org.junit.jupiter.api.Assertions.assertThrows(
             org.springframework.security.oauth2.core.OAuth2AuthenticationException.class,
