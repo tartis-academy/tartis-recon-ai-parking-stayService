@@ -46,6 +46,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @WebMvcTest(StayRestAdapter.class)
 @Import({SecurityConfig.class, StayRestMapper.class, CustomizedExceptionAdapter.class})
@@ -266,12 +267,16 @@ class StayRestAdapterMvcTest {
     // ==========================================
     // PRUEBAS DE AUTORIZACIÓN POR ROL (SEC-10)
     // ==========================================
-
     @Test
-    @DisplayName("Debe rechazar con 401 una peticion sin token")
+    @DisplayName("Debe rechazar con 401 una peticion sin token (y validar WWW-Authenticate + ErrorResponse)")
     void shouldReturn401WhenNoTokenProvided() throws Exception {
         mockMvc.perform(get("/v1/stays"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().exists("WWW-Authenticate"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.path").value("/v1/stays"));
     }
 
     @Test
@@ -378,6 +383,61 @@ class StayRestAdapterMvcTest {
         mockMvc.perform(get("/v1/stays")
                         .with(operarioJwt()))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar check-in sin token (401)")
+    void checkIn_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/v1/stays/check-in")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"1234ABC\",\"vehicleType\":\"CAR\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().exists("WWW-Authenticate"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.path").value("/v1/stays/check-in"));
+
+        verify(checkInUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar check-out sin token (401)")
+    void checkOut_withoutToken_returns401() throws Exception {
+        mockMvc.perform(post("/v1/stays/check-out")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"1234ABC\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().exists("WWW-Authenticate"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.path").value("/v1/stays/check-out"));
+
+        verify(checkOutUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar consultar estancia por ID sin token (401)")
+    void getStayById_withoutToken_returns401() throws Exception {
+        UUID stayId = UUID.randomUUID();
+        mockMvc.perform(get("/v1/stays/{stayId}", stayId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().exists("WWW-Authenticate"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.path").value("/v1/stays/" + stayId));
+
+        verify(getStayUseCase, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("UNAUTHENTICATED: Debe rechazar listar estancias sin token (401)")
+    void listStays_withoutToken_returns401() throws Exception {
+        mockMvc.perform(get("/v1/stays"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().exists("WWW-Authenticate"))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("UNAUTHORIZED"));
+        verify(listStaysUseCase, never()).execute(any(), anyInt(), anyInt());
     }
 
     private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor adminJwt() {
