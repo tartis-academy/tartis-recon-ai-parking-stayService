@@ -245,6 +245,10 @@ paths:
         - name: size
           in: query
           required: false
+          description: >
+            Number of stays per page. Values above 100 are silently capped at
+            100: each row triggers a look-up of its plate against
+            vehicle-service (N+1), so larger pages would amplify that cost.
           schema:
             type: integer
             default: 20
