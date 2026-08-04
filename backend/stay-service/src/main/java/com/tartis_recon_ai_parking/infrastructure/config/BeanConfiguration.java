@@ -3,7 +3,6 @@ package com.tartis_recon_ai_parking.infrastructure.config;
 import java.util.UUID;
 
 import org.slf4j.MDC;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -110,7 +109,6 @@ public class BeanConfiguration {
      * consultas legitimas que tardan mas que el resto de integraciones.
      */
     @Bean
-    @Qualifier("vehicleRestClientBuilder")
     public RestClient.Builder vehicleRestClientBuilder(
             OAuth2AuthorizedClientManager authorizedClientManager,
             @Value("${services.rest-client.connect-timeout-ms:3000}") long connectTimeoutMs,
