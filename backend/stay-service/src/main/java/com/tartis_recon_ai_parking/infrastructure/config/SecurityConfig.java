@@ -138,24 +138,33 @@ public class SecurityConfig {
             if (!rutaSse.matches(request)) {
                 return soloCabecera.resolve(request);
             }
-            String jwtParam = request.getParameter("jwt");
-            if (jwtParam != null && !jwtParam.isBlank()) {
-                String headerToken = request.getHeader("Authorization");
-                if (headerToken != null && headerToken.toLowerCase().startsWith("bearer ")) {
+            String[] jwtValues = request.getParameterValues("jwt");
+            if (jwtValues != null && jwtValues.length > 0) {
+                if (jwtValues.length > 1) {
                     throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
                             org.springframework.security.oauth2.server.resource.BearerTokenErrors
                                     .invalidRequest("Found multiple bearer tokens in the request"));
                 }
-                String accessTokenParam = request.getParameter("access_token");
-                if (accessTokenParam != null && !accessTokenParam.isBlank()) {
-                    throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
-                            org.springframework.security.oauth2.server.resource.BearerTokenErrors
-                                    .invalidRequest("Found multiple bearer tokens in the request"));
+                String jwtParam = jwtValues[0];
+                if (jwtParam != null && !jwtParam.isBlank()) {
+                    String headerToken = request.getHeader("Authorization");
+                    if (headerToken != null && headerToken.toLowerCase().startsWith("bearer ")) {
+                        throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
+                                org.springframework.security.oauth2.server.resource.BearerTokenErrors
+                                        .invalidRequest("Found multiple bearer tokens in the request"));
+                    }
+                    String[] accessTokenValues = request.getParameterValues("access_token");
+                    if (accessTokenValues != null && accessTokenValues.length > 0) {
+                        throw new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
+                                org.springframework.security.oauth2.server.resource.BearerTokenErrors
+                                        .invalidRequest("Found multiple bearer tokens in the request"));
+                    }
+                    return jwtParam;
                 }
-                return jwtParam;
             }
             return tambienQueryString.resolve(request);
         };
+
     }
 
 

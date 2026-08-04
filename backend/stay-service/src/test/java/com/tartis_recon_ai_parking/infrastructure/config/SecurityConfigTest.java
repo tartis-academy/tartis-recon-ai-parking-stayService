@@ -133,4 +133,33 @@ class SecurityConfigTest {
             () -> resolver.resolve(request)
         );
     }
+
+    @Test
+    @DisplayName("Debe lanzar OAuth2AuthenticationException cuando se envian multiples parametros jwt")
+    void shouldThrowWhenMultipleJwtParametersPresent() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", SecurityConfig.SSE_PATH);
+        request.setRequestURI(SecurityConfig.SSE_PATH);
+        request.addParameter("jwt", "token-1");
+        request.addParameter("jwt", "token-2");
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.security.oauth2.core.OAuth2AuthenticationException.class,
+            () -> resolver.resolve(request)
+        );
+    }
+
+    @Test
+    @DisplayName("Debe lanzar OAuth2AuthenticationException cuando se envia jwt y access_token a la vez")
+    void shouldThrowWhenBothJwtAndAccessTokenParametersPresent() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", SecurityConfig.SSE_PATH);
+        request.setRequestURI(SecurityConfig.SSE_PATH);
+        request.setParameter("jwt", "jwt-token");
+        request.setParameter("access_token", "access-token");
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.security.oauth2.core.OAuth2AuthenticationException.class,
+            () -> resolver.resolve(request)
+        );
+    }
 }
+
