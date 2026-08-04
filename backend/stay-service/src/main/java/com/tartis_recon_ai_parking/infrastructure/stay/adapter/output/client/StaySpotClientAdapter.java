@@ -95,6 +95,7 @@ public class StaySpotClientAdapter implements StaySpotPort {
     }
 
     @Override
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "releaseSpotFallback")
     public void releaseSpot(UUID spotId) {
         try {
             restClient.post()
@@ -107,7 +108,20 @@ public class StaySpotClientAdapter implements StaySpotPort {
         }
     }
 
+    /**
+     * Mismo criterio que occupySpotFallback(): firma tipada a
+     * CallNotPermittedException para que Resilience4j solo la invoque con
+     * el circuito abierto, nunca enmascarando otros fallos.
+     */
+    private void releaseSpotFallback(UUID spotId, CallNotPermittedException t) {
+        throw new SpotServiceException(
+                "spot-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo liberar la plaza " + spotId,
+                t);
+    }
+
     @Override
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "updateSpotStatusFallback")
     public void updateSpotStatus(UUID spotId, String status) {
         try {
             restClient.patch()
@@ -119,5 +133,15 @@ public class StaySpotClientAdapter implements StaySpotPort {
             throw new SpotServiceException(
                     "No se pudo contactar con spot-service para actualizar el estado de la plaza " + spotId, e);
         }
+    }
+
+    /**
+     * Fallback de updateSpotStatus(). Firma tipada a CallNotPermittedException.
+     */
+    private void updateSpotStatusFallback(UUID spotId, String status, CallNotPermittedException t) {
+        throw new SpotServiceException(
+                "spot-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo actualizar el estado de la plaza " + spotId + " a " + status,
+                t);
     }
 }
