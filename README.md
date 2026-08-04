@@ -43,9 +43,8 @@ una estancia (check-out). Trae:
   `occurredAt`, `data` con `stayId`, `spotId`, `plate`, `entryDate`,
   `exitDate`, `totalAmount`).
 
-Los navegadores no pueden mandar cabecera `Authorization` en `EventSource` (API nativa de JavaScript),
-así que el JWT también se acepta por parámetro de query mediante `jwt` (`?jwt=<token>`) o `access_token` (`?access_token=<token>`).
+Los navegadores no pueden mandar cabecera `Authorization` en `EventSource`,
+así que el JWT también se acepta como query param `access_token`.
 
-### Riesgo asumido y mitigación (SSE-08 / GW-06)
-- **Riesgo asumido:** Transmitir tokens en la URL expone el JWT a ser registrado en el historial del navegador o en proxies intermedios.
-- **Mitigación aplicada:** Se restringe la aceptación del token por URL **exclusivamente** al método `GET` en la ruta `/v1/events` (`SecurityConfig.java`). Adicionalmente, `RequestLoggingFilter` omite la query string de los logs de acceso en el backend, y el logger de Kong redacta la URL para impedir filtraciones de tokens en logs.
+Detalle completo (contrato, roles, límites) en `openapi.yml` (path
+`/events`) y en `docs/adr/0001-sse-endpoint-en-stay-service.md`.

@@ -39,9 +39,6 @@ class EventStreamRestAdapterMvcTest {
     @MockitoBean
     private SseEmitterRegistry registry;
 
-    @MockitoBean
-    private org.springframework.security.oauth2.jwt.JwtDecoder jwtDecoder;
-
     @Test
     @DisplayName("Debe rechazar con 401 una peticion sin token")
     void shouldReturn401WhenNoTokenProvided() throws Exception {
