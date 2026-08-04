@@ -44,7 +44,11 @@ una estancia (check-out). Trae:
   `exitDate`, `totalAmount`).
 
 Los navegadores no pueden mandar cabecera `Authorization` en `EventSource`,
-así que el JWT también se acepta como query param `access_token`.
+así que el JWT también se acepta como query param `access_token` — y solo con ese
+nombre, el del RFC 6750. Es el que manda el frontend (`use-sse.ts`) y el que declara
+la route `stay-service-events-route` de `kong/kong.yml`. `?jwt=` (el default del
+plugin `jwt` de Kong) no autentica: un segundo nombre obliga a reimplementar a mano
+la detección de token smuggling que Spring ya trae para `access_token`.
 
 Detalle completo (contrato, roles, límites) en `openapi.yml` (path
 `/events`) y en `docs/adr/0001-sse-endpoint-en-stay-service.md`.
