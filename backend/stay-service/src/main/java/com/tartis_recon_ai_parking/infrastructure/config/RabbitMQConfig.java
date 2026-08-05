@@ -35,10 +35,22 @@ public class RabbitMQConfig {
     public static final String ROUTING_KEY_TICKET_CHANGED = "ticket-changed-v1";
     public static final String TICKET_CHANGED_QUEUE = "stay-service-ticket-changed-queue";
 
+    public static final String ROUTING_KEY_VEHICLE_CHANGED = "vehicle-changed-v1";
+    public static final String VEHICLE_CHANGED_QUEUE = "stay-service-vehicle-changed-queue";
+
+    // DLX/DLQ compartido para los consumidores nuevos, siguiendo el mismo
+    // patron que spot-service/ticket-service ya usan para stay-closed-v1
+    // (ASY-08). Un unico DLX topic con una DLQ por evento: RepublishMessageRecoverer
+    // republica con errorRoutingKeyPrefix + routing key ORIGINAL del mensaje,
+    // asi que cada fallo cae en su propia DLQ aunque el recoverer sea uno solo.
+    // El prefijo por defecto es "error." (no vacio), asi que hay que anularlo
+    // explicitamente con errorRoutingKeyPrefix("") para que la routing key
+    // republicada case con los bindings de abajo, que no llevan prefijo.
     public static final String DLX_EXCHANGE = "stay-service-events-dlx";
     public static final String TARIFF_CHANGED_DLQ = "stay-service-tariff-changed-dlq";
     public static final String SPOT_STATUS_CHANGED_DLQ = "stay-service-spot-status-changed-dlq";
     public static final String TICKET_CHANGED_DLQ = "stay-service-ticket-changed-dlq";
+    public static final String VEHICLE_CHANGED_DLQ = "stay-service-vehicle-changed-dlq";
 
     // El publicador declara SOLO el exchange. Las colas de spot-service y
     // ticket-service las declara cada consumidor, que es quien conoce sus
@@ -94,6 +106,21 @@ public class RabbitMQConfig {
                 .with(ROUTING_KEY_TICKET_CHANGED);
     }
 
+    @Bean
+    public Queue vehicleChangedQueue() {
+        return QueueBuilder.durable(VEHICLE_CHANGED_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", ROUTING_KEY_VEHICLE_CHANGED)
+                .build();
+    }
+
+    @Bean
+    public Binding bindingVehicleChanged(Queue vehicleChangedQueue, TopicExchange parkingEventsExchange) {
+        return BindingBuilder.bind(vehicleChangedQueue)
+                .to(parkingEventsExchange)
+                .with(ROUTING_KEY_VEHICLE_CHANGED);
+    }
+
     // =========================================================================
     // DEAD LETTER QUEUE (DLQ) & EXCHANGE (DLX) PARA LOS CONSUMIDORES DE STAY-SERVICE
     // =========================================================================
@@ -136,6 +163,18 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(ticketChangedDLQ)
                 .to(stayServiceEventsDLX)
                 .with(ROUTING_KEY_TICKET_CHANGED);
+    }
+
+    @Bean
+    public Queue vehicleChangedDLQ() {
+        return QueueBuilder.durable(VEHICLE_CHANGED_DLQ).build();
+    }
+
+    @Bean
+    public Binding bindingVehicleChangedDLQ(Queue vehicleChangedDLQ, TopicExchange stayServiceEventsDLX) {
+        return BindingBuilder.bind(vehicleChangedDLQ)
+                .to(stayServiceEventsDLX)
+                .with(ROUTING_KEY_VEHICLE_CHANGED);
     }
 
     @Bean
