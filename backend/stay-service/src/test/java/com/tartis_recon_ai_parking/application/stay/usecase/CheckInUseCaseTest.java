@@ -2,7 +2,10 @@ package com.tartis_recon_ai_parking.application.stay.usecase;
 
 import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
+import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
 import com.tartis_recon_ai_parking.application.stay.port.output.StaySpotPort;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTariffPort;
@@ -71,6 +74,9 @@ class CheckInUseCaseTest {
     @Mock
     private StayTicketPort ticketPort;
 
+    @Mock
+    private StayEventStreamPublisher eventStreamPublisher;
+
     private CheckInUseCase useCase;
 
     private UUID vehicleId;
@@ -83,7 +89,7 @@ class CheckInUseCaseTest {
         spotId = UUID.randomUUID();
         tariffId = UUID.randomUUID();
         useCase = new CheckInUseCase(stayPersistence, vehiclePort, spotPort, tariffPort, ticketPort,
-                new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
+                eventStreamPublisher, new StayDTOFactory(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     /** Emisión de ticket por defecto para los caminos que llegan a persistir la estancia. */
@@ -123,13 +129,16 @@ class CheckInUseCaseTest {
         assertEquals(ticketId, result.getEntryTicket().getTicketId());
         assertEquals("BC-0001", result.getEntryTicket().getBarCode());
         assertEquals(NOW, result.getEntryTicket().getIssuedAt());
+
+        verify(eventStreamPublisher).publish(any(StayCreatedEvent.class));
     }
+
 
     @Test
     @DisplayName("ocupa plaza del tipo que resuelve vehicle-service, no el detectado (CA2)")
     void shouldOccupySpotOfResolvedVehicleType() {
         // El totem detecta CAR, pero el vehiculo esta registrado como MOTORBIKE.
-        when(vehiclePort.getOrCreateVehicle(PLATE, VehicleType.CAR))
+        when(vehiclePort.getOrCreateVehicle(PLATE, VehicleType.CAR, VehicleAttributes.EMPTY))
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.MOTORBIKE, true));
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.MOTORBIKE)).thenReturn(spotId);
@@ -146,7 +155,7 @@ class CheckInUseCaseTest {
     @Test
     @DisplayName("normaliza la matricula antes de resolver el vehiculo (IN-01, CB-01)")
     void shouldNormalizePlateBeforeResolving() {
-        when(vehiclePort.getOrCreateVehicle(PLATE, null))
+        when(vehiclePort.getOrCreateVehicle(PLATE, null, VehicleAttributes.EMPTY))
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true));
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
@@ -156,7 +165,7 @@ class CheckInUseCaseTest {
 
         useCase.execute(new StayCreateDTO(" 1234 abc ", null));
 
-        verify(vehiclePort).getOrCreateVehicle(PLATE, null);
+        verify(vehiclePort).getOrCreateVehicle(PLATE, null, VehicleAttributes.EMPTY);
     }
 
     // ------------------------------------------------------------------
@@ -263,6 +272,34 @@ class CheckInUseCaseTest {
         verify(stayPersistence, never()).save(any());
     }
 
+    // ------------------------------------------------------------------
+    // Condiciones de carrera
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("doble check-in simultaneo: si la BD rechaza el duplicado, libera la plaza y propaga el 409")
+    void shouldReleaseSpot_whenDatabaseRejectsConcurrentDuplicate() {
+        givenVehicle(VehicleType.CAR, true);
+        // La comprobacion previa dice que no hay estancia activa: en el momento
+        // de mirar, era verdad. La otra peticion guarda entre esa consulta y
+        // nuestro save, que es exactamente la ventana que no se puede cerrar
+        // desde Java. Quien lanza aqui es el indice unico de la base de datos,
+        // traducido por StayPersistenceAdapter.
+        givenNoActiveStay();
+        when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
+        when(tariffPort.getActiveTariffId(VehicleType.CAR)).thenReturn(tariffId);
+        givenTicketIssued();
+        when(stayPersistence.save(any(Stay.class))).thenThrow(new DuplicateActiveStayException(
+                "El vehiculo " + vehicleId + " ya tiene una estancia en curso"));
+
+        assertThrows(DuplicateActiveStayException.class,
+                () -> useCase.execute(new StayCreateDTO(PLATE, null)));
+
+        // Lo importante: la plaza que habiamos ocupado se devuelve. Si no, cada
+        // carrera perdida dejaria una plaza inutilizada para siempre.
+        verify(spotPort).releaseSpot(spotId);
+    }
+
     @Test
     @DisplayName("si tampoco se puede liberar, gana el error original")
     void shouldPropagateOriginalError_whenCompensationAlsoFails() {
@@ -310,7 +347,7 @@ class CheckInUseCaseTest {
     // ------------------------------------------------------------------
 
     private void givenVehicle(VehicleType type, boolean active) {
-        when(vehiclePort.getOrCreateVehicle(eq(PLATE), any()))
+        when(vehiclePort.getOrCreateVehicle(eq(PLATE), any(), any()))
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, type, active));
     }
 

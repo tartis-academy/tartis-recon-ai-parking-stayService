@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output;
 
+import com.tartis_recon_ai_parking.domain.stay.exception.ConcurrentStayModificationException;
 import com.tartis_recon_ai_parking.domain.stay.exception.DuplicateActiveStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.NoActiveTariffException;
@@ -13,14 +14,25 @@ import com.tartis_recon_ai_parking.domain.stay.exception.VehicleDeactivatedExcep
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.customizedexception.adapter.output.dto.ErrorResponse;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DeadlockLoserDataAccessException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 
@@ -37,8 +49,9 @@ import java.util.stream.Collectors;
  *   <li><b>400</b> — matricula vacia / tipo de vehiculo invalido / validacion de campos
  *       / matricula rechazada por vehicle-service (formato invalido)</li>
  *   <li><b>404</b> — estancia inexistente (consultas)</li>
- *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05)
- *       o sin tarifa activa configurada (IN-08)</li>
+ *   <li><b>409</b> — parking completo (RN-01), vehiculo ya dentro (IN-02, CB-05),
+ *       sin tarifa activa configurada (IN-08), o conflicto entre dos operaciones
+ *       simultaneas sobre la misma estancia</li>
  *   <li><b>422</b> — vehiculo dado de baja (RN-11)</li>
  *   <li><b>503</b> — un servicio externo (spot/tariff/ticket/vehicle) no responde
  *       o falla por un motivo que no es de negocio</li>
@@ -64,6 +77,25 @@ public class CustomizedExceptionAdapter {
     @ExceptionHandler(DuplicateActiveStayException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateStay(DuplicateActiveStayException ex,
                                                              HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    /**
+     * Condiciones de carrera: dos operaciones simultaneas sobre la misma
+     * estancia y esta llego la segunda (tipicamente un doble check-out).
+     *
+     * <p>409 y no 500 porque no se ha roto nada: la primera de las dos si se
+     * completo, y lo unico que ha pasado es que este cambio se descarta para no
+     * pisarla. Al operario del totem le sirve mas "esta salida ya se ha
+     * registrado, consulta el estado" que "error inesperado".
+     */
+    @ExceptionHandler(ConcurrentStayModificationException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentModification(ConcurrentStayModificationException ex,
+                                                                      HttpServletRequest request) {
+        // Se registra en el log aunque se responda 409: son sucesos raros y
+        // saber cada cuanto ocurren de verdad es lo que permite decidir si hace
+        // falta algo mas fuerte (bloqueo pesimista, idempotencia por cabecera).
+        log.warn("Conflicto de concurrencia en {}: {}", request.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
@@ -118,6 +150,26 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
+    /**
+     * RES-05 (ADR 002): el circuito de un servicio externo esta OPEN, asi que
+     * Resilience4j corta la llamada antes de intentarla y lanza
+     * CallNotPermittedException. Sin este handler caeria en la red de seguridad
+     * generica y el operador recibiria un 500 "Ha ocurrido un error inesperado"
+     * en vez de un 503 interpretable (IN-36). Se traduce igual que un servicio
+     * caido: 503, porque para el cliente es lo mismo (el destino no responde),
+     * solo que aqui el fallo es inmediato en vez de esperar al timeout.
+     */
+    @ExceptionHandler(CallNotPermittedException.class)
+    public ResponseEntity<ErrorResponse> handleCircuitOpen(CallNotPermittedException ex,
+                                                           HttpServletRequest request) {
+        log.warn("Circuito abierto, llamada no permitida en {}: {}",
+                request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "El servicio de tarifas no está disponible temporalmente; "
+                        + "la salida no puede completarse. Reintente en unos instantes.",
+                request);
+    }
+
 
     /**
      * ticket-service caido, con timeout, con error 5xx, o incumpliendo su propio
@@ -167,6 +219,110 @@ public class CustomizedExceptionAdapter {
         return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
+    // ============================================================
+    // Rupturas a nivel de base de datos (escenarios de ruptura BD)
+    // ============================================================
+
+    /**
+     * Postgres caido, inalcanzable o con el pool de conexiones agotado
+     * (CannotCreateTransactionException, DataAccessResourceFailureException) y
+     * timeouts de consulta (QueryTimeoutException). Es infraestructura caida,
+     * el mismo tipo de fallo que ya se comunica como 503 para los servicios
+     * externos: el operario del totem tiene que poder distinguir "espera y
+     * reintenta" de "hay un bug".
+     *
+     * <p>El detalle real (host, SQL, causa raiz) se registra en el log del
+     * servidor; al cliente solo llega el mensaje generico (IN-36).
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class,
+            DataAccessResourceFailureException.class,
+            QueryTimeoutException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseUnavailable(RuntimeException ex,
+                                                                   HttpServletRequest request) {
+        log.error("Fallos de infraestructura de base de datos en {}", request.getRequestURI(), ex);
+        return build(HttpStatus.SERVICE_UNAVAILABLE,
+                "La base de datos no esta disponible, reintente la operacion en unos instantes", request);
+    }
+
+    /**
+     * Deadlock y bloqueos pesimistas no adquiridos (DeadlockLoserDataAccessException,
+     * CannotAcquireLockException, PessimisticLockingFailureException). Son conflictos
+     * transitorios de concurrencia, no bugs: la operacion puede reintentarse tal cual
+     * y tiene posibilidades de completarse. Mismo criterio que el 409 de las
+     * condiciones de carrera ({@link #handleConcurrentModification}).
+     */
+    @ExceptionHandler({DeadlockLoserDataAccessException.class,
+            CannotAcquireLockException.class,
+            PessimisticLockingFailureException.class})
+    public ResponseEntity<ErrorResponse> handleDatabaseConflict(org.springframework.dao.DataAccessException ex,
+                                                                HttpServletRequest request) {
+        log.warn("Conflicto transitorio de base de datos en {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT,
+                "La base de datos no pudo completar la operacion por un conflicto de concurrencia,"
+                        + " reintente la operacion", request);
+    }
+
+    // ============================================================
+    // Errores de entrada de Spring MVC (400/405 en vez de 500)
+    // ============================================================
+
+    /**
+     * Parametro de ruta o query con el tipo equivocado (un UUID donde se espera
+     * {@code /v1/stays/{stayId}}), o un enum invalido (status de listado).
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "El valor del parametro '" + ex.getName() + "' no es valido", request);
+    }
+
+    /** Cuerpo JSON malformado o inesperado para el contrato del endpoint. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
+                                                              HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "El cuerpo de la peticion no es un JSON valido para este endpoint", request);
+    }
+
+    /** Falta un parametro de query obligatorio. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException ex,
+                                                            HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST,
+                "Falta el parametro obligatorio '" + ex.getParameterName() + "'", request);
+    }
+
+    /** Metodo HTTP incorrecto para la ruta (GET a un POST, etc.). */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
+                                                                  HttpServletRequest request) {
+        return build(HttpStatus.METHOD_NOT_ALLOWED,
+                "Metodo HTTP no permitido para esta ruta: " + ex.getMethod(), request);
+    }
+
+    /**
+     * HTTP 401 Unauthorized: El token de autenticación está ausente, es inválido o ha caducado.
+     * <p>
+     * Diagnóstico para el equipo: El problema reside en la forma en que el frontend envía el token de autenticación.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(AuthenticationException ex, HttpServletRequest request) {
+        log.warn("Autenticación fallida o token inválido en {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, "Token de autenticación ausente, inválido o caducado.", request);
+    }
+
+    /**
+     * HTTP 403 Forbidden: El token de autenticación es válido pero el usuario no posee el rol necesario.
+     * <p>
+     * Diagnóstico para el equipo: El problema reside en los roles configurados asignados a la identidad.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        log.warn("Acceso denegado en {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, "No tiene permisos para realizar esta acción.", request);
+    }
+
     /**
      * Red de seguridad (IN-36): cualquier excepcion que no tenga un handler mas
      * especifico cae aqui en vez de escapar sin traducir hacia el manejo de
@@ -180,10 +336,7 @@ public class CustomizedExceptionAdapter {
      * jamas vea una respuesta sin traducir (texto plano / stack trace crudo).
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) throws Exception {
-        if (ex instanceof AccessDeniedException || ex instanceof AuthenticationException) {
-            throw ex;
-        }
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Excepcion no controlada en {}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado", request);
     }
