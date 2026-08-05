@@ -262,15 +262,6 @@ public class CustomizedExceptionAdapter {
                         + " reintente la operacion", request);
     }
 
-    /**
-     * Queries mal formadas y mal uso de la API de persistencia
-     * (InvalidDataAccessApiUsageException, JpaSystemException). Son bugs
-     * nuestros, no fallos de infraestructura: se quedan en 500 para que no se
-     * confundan con un problema del entorno que se resolveria reintentando.
-     * Caen en la red de seguridad generica ({@link #handleUnexpected}) y el
-     * detalle queda solo en el log.
-     */
-
     // ============================================================
     // Errores de entrada de Spring MVC (400/405 en vez de 500)
     // ============================================================

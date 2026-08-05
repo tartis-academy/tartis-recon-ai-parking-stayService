@@ -10,7 +10,6 @@ import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.V
 import org.springframework.beans.factory.annotation.Qualifier;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
