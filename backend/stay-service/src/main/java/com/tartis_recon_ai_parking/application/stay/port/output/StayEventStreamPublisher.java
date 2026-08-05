@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.application.stay.dto.SpotStatusChangedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.TariffChangedEvent;
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleChangedEvent;
 
 // Reenvia por SSE un evento ya publicado en RabbitMQ o generado en el flujo de estancia.
 public interface StayEventStreamPublisher {
@@ -15,5 +16,7 @@ public interface StayEventStreamPublisher {
     void publish(TariffChangedEvent event);
 
     void publish(SpotStatusChangedEvent event);
+
+    void publish(VehicleChangedEvent event);
 }
 
