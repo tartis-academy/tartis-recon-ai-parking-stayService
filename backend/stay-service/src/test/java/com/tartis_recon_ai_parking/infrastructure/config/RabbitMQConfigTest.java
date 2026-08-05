@@ -2,6 +2,8 @@ package com.tartis_recon_ai_parking.infrastructure.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -12,7 +14,10 @@ import org.springframework.amqp.support.converter.MessageConverter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class RabbitMQConfigTest {
 
@@ -92,5 +97,27 @@ class RabbitMQConfigTest {
     void shouldCreateMessageRecovererPointingToDeadLetterExchange() {
         MessageRecoverer recoverer = config.messageRecoverer(mock(RabbitTemplate.class));
         assertTrue(recoverer instanceof RepublishMessageRecoverer);
+    }
+
+    @Test
+    void shouldRepublishToDeadLetterQueueWithoutErrorPrefixOnRoutingKey() {
+        // RepublishMessageRecoverer republica por defecto con "error." + routing
+        // key original. Como las DLQ estan bindeadas con la routing key exacta
+        // (sin prefijo), ese "error." haria que el mensaje no case con ninguna
+        // binding y se pierda en silencio (B1 del review de PR #112). Este test
+        // ejercita recover() de verdad para comprobar que no ocurre.
+        RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
+        MessageRecoverer recoverer = config.messageRecoverer(rabbitTemplate);
+
+        MessageProperties properties = new MessageProperties();
+        properties.setReceivedRoutingKey(RabbitMQConfig.ROUTING_KEY_SPOT_STATUS_CHANGED);
+        Message failedMessage = new Message("{}".getBytes(), properties);
+
+        recoverer.recover(failedMessage, new RuntimeException("fallo simulado tras agotar reintentos"));
+
+        verify(rabbitTemplate).send(
+                eq(RabbitMQConfig.DLX_EXCHANGE),
+                eq(RabbitMQConfig.ROUTING_KEY_SPOT_STATUS_CHANGED),
+                any(Message.class));
     }
 }

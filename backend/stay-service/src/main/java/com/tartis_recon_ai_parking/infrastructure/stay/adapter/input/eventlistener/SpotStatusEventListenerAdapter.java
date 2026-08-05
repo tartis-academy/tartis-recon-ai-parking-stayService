@@ -21,9 +21,10 @@ public class SpotStatusEventListenerAdapter {
         this.eventStreamPublisher = eventStreamPublisher;
     }
 
-    @RabbitListener(queues = RabbitMQConfig.SPOT_STATUS_CHANGED_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.SPOT_STATUS_CHANGED_QUEUE, containerFactory = "sseListenerContainerFactory")
     public void handleSpotStatusChangedEvent(SpotStatusChangedEvent event) {
-        log.info("Recibido SpotStatusChangedEvent: {}", event);
+        log.info("Recibido SpotStatusChangedEvent {} para la plaza {}", event.eventId(), event.data().spotId());
+        log.debug("SpotStatusChangedEvent completo: {}", event);
         eventStreamPublisher.publish(event);
     }
 }

@@ -5,11 +5,14 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -32,8 +35,11 @@ public class RabbitMQConfig {
     // DLX/DLQ compartido para los consumidores nuevos, siguiendo el mismo
     // patron que spot-service/ticket-service ya usan para stay-closed-v1
     // (ASY-08). Un unico DLX topic con una DLQ por evento: RepublishMessageRecoverer
-    // sin routing key fija reenvia usando la routing key ORIGINAL del mensaje,
+    // republica con errorRoutingKeyPrefix + routing key ORIGINAL del mensaje,
     // asi que cada fallo cae en su propia DLQ aunque el recoverer sea uno solo.
+    // El prefijo por defecto es "error." (no vacio), asi que hay que anularlo
+    // explicitamente con errorRoutingKeyPrefix("") para que la routing key
+    // republicada case con los bindings de abajo, que no llevan prefijo.
     public static final String DLX_EXCHANGE = "stay-service-events-dlx";
     public static final String TARIFF_CHANGED_DLQ = "stay-service-tariff-changed-dlq";
     public static final String SPOT_STATUS_CHANGED_DLQ = "stay-service-spot-status-changed-dlq";
@@ -111,11 +117,29 @@ public class RabbitMQConfig {
 
     @Bean
     public MessageRecoverer messageRecoverer(RabbitTemplate rabbitTemplate) {
-        return new RepublishMessageRecoverer(rabbitTemplate, DLX_EXCHANGE);
+        return new RepublishMessageRecoverer(rabbitTemplate, DLX_EXCHANGE)
+                .errorRoutingKeyPrefix("");
     }
 
     @Bean // Traductor automático que transforma nuestro objeto Java a formato JSON al enviar
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
+    }
+
+    // Los listeners de SSE-06 (tariff-changed, spot-status-changed) solo hacen
+    // un broadcast() en memoria: el paralelismo no compra throughput, y con
+    // concurrency>1 dos eventos de la misma plaza/tarifa pueden procesarse a
+    // la vez y llegar al SSE en orden invertido. Un factory dedicado con
+    // concurrency=1 evita eso sin tocar spring.rabbitmq.listener.simple.* (que
+    // seguiria aplicando a cualquier otro listener que se anada despues).
+    @Bean
+    public SimpleRabbitListenerContainerFactory sseListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory connectionFactory) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(factory, connectionFactory);
+        factory.setConcurrentConsumers(1);
+        factory.setMaxConcurrentConsumers(1);
+        return factory;
     }
 }

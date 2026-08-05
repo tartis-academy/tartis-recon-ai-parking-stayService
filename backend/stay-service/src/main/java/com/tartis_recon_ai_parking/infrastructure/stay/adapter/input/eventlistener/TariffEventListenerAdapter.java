@@ -21,9 +21,10 @@ public class TariffEventListenerAdapter {
         this.eventStreamPublisher = eventStreamPublisher;
     }
 
-    @RabbitListener(queues = RabbitMQConfig.TARIFF_CHANGED_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.TARIFF_CHANGED_QUEUE, containerFactory = "sseListenerContainerFactory")
     public void handleTariffChangedEvent(TariffChangedEvent event) {
-        log.info("Recibido TariffChangedEvent: {}", event);
+        log.info("Recibido TariffChangedEvent {} para la tarifa {}", event.eventId(), event.data().tariffId());
+        log.debug("TariffChangedEvent completo: {}", event);
         eventStreamPublisher.publish(event);
     }
 }
