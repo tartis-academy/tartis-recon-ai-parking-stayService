@@ -10,10 +10,6 @@ public interface StayTicketPort {
      */
     EntryTicketInfo issueEntryTicket(UUID stayId, String plate, Instant checkIn);
 
-    /**
-     * Genera el ticket/recibo de salida en el check-out e invalida el de entrada (IN-21).
-     */
-    UUID issueExitTicket(UUID stayId, UUID entryTicketId, BigDecimal totalAmount);
 
     record EntryTicketInfo(UUID ticketId, String barCode, Instant issuedAt) {}
 }

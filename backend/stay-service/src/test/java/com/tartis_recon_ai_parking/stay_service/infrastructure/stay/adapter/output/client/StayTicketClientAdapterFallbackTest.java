@@ -142,39 +142,4 @@ class StayTicketClientAdapterFallbackTest {
         mockServer.verify();
     }
 
-    @Test
-    void issueExitTicketFallback_isInvokedWhenCircuitIsOpen() {
-
-        circuitBreakerRegistry
-                .circuitBreaker("ticketService")
-                .transitionToOpenState();
-
-        UUID result = adapter.issueExitTicket(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                BigDecimal.TEN);
-
-        assertThat(result).isNotNull();
-    }
-
-    @Test
-    void issueExitTicket_returnsOfflineUuid_whenServerReturns500() {
-
-        circuitBreakerRegistry
-                .circuitBreaker("ticketService")
-                .transitionToClosedState();
-
-        mockServer.expect(requestTo("http://ticket-service:8080/v1/tickets"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withServerError());
-
-        UUID result = adapter.issueExitTicket(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                BigDecimal.TEN);
-
-        assertThat(result).isNotNull();
-
-        mockServer.verify();
-    }
 }

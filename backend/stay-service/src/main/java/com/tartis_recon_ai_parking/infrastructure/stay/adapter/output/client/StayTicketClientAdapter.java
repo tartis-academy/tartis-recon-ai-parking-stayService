@@ -5,8 +5,13 @@ import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,61 +88,60 @@ public class StayTicketClientAdapter implements StayTicketPort {
      * abierto,
      * se genera un ticket offline (degradación suave) para no bloquear la barrera.
      */
-    private EntryTicketInfo issueEntryTicketFallback(UUID stayId, String plate, Instant issuedAt, Throwable t) {
-        log.warn("ticket-service no disponible ({}). Generando ticket de entrada OFFLINE para matrícula {}",
-                t.getClass().getSimpleName(), plate);
-
-        // Generamos un ID y código temporal. El caso de uso lo recibirá y el check-in
-        // continuará.
-        return new EntryTicketInfo(
-                UUID.randomUUID(),
-                "OFFLINE-ENTRY-" + plate,
-                issuedAt);
+    public EntryTicketInfo issueEntryTicketFallback(UUID stayId, String plate, Instant issuedAt, Throwable t) throws Throwable {
+    if (!shouldDegradeToOffline(t)) {
+        throw t;
     }
 
-    @Override
-    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "issueExitTicketFallback")
-    public UUID issueExitTicket(UUID stayId, UUID entryTicketId, BigDecimal totalAmount) {
-        // TicketRequest de ticket-service (POST /v1/tickets) solo acepta stayId y
-        // totalAmount;
-        // entryTicketId no forma parte de su contrato todavia.
-        record ExitTicketRequest(String stayId, BigDecimal totalAmount) {
-        }
+    // M1: Sufijo único basado en UUID para evitar colisiones y no exponer la matrícula en claro
+    String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    String offlineCode = "OFFLINE-ENTRY-" + uniqueSuffix;
+    
+    // M2: ticketId local para la estancia degradada
+    UUID fallbackTicketId = UUID.randomUUID();
 
-        Map<?, ?> response;
-        try {
-            response = restClient.post()
-                    .uri("/v1/tickets")
-                    .body(new ExitTicketRequest(stayId.toString(), totalAmount))
-                    .retrieve()
-                    .body(Map.class);
-        } catch (RestClientException e) {
-            throw new TicketServiceException(
-                    "No se pudo contactar con ticket-service para emitir el ticket de salida de la estancia "
-                            + stayId,
-                    e);
-        }
+    log.warn("[RECONCILIATION-REQUIRED] RES-07 Fallback activado para stayId={}. ticket-service no disponible ({}). " +
+             "Generado ticket offline local ticketId={}, barCode={}.",
+             stayId, t.getClass().getSimpleName(), fallbackTicketId, offlineCode);
 
-        if (response == null || !response.containsKey("uniqueId")) {
-            // Respuesta valida en forma pero incompleta: no hay un caso de negocio
-            // legitimo en el que emitir un ticket de salida deba denegarse, asi que
-            // esto es siempre un fallo de contrato de ticket-service, no del check-out.
-            throw new TicketServiceException(
-                    "ticket-service no devolvió el ticket de salida para la estancia " + stayId);
-        }
-
-        return UUID.fromString((String) response.get("uniqueId"));
-    }
+    return new EntryTicketInfo(fallbackTicketId, offlineCode, issuedAt);
+}
 
     /**
-     * Fallback de contingencia (RES-07): Si ticket-service cae en el check-out,
-     * se genera un ticket offline para no bloquear la salida del vehículo.
+     * Evalúa si la excepción corresponde a un fallo de infraestructura o circuito
+     * abierto
+     * que justifica la degradación suave a ticket OFFLINE.
      */
-    private UUID issueExitTicketFallback(UUID stayId, UUID entryTicketId, BigDecimal totalAmount, Throwable t) {
-        log.warn("ticket-service no disponible ({}). Generando ticket de salida OFFLINE para estancia {}",
-                t.getClass().getSimpleName(), stayId);
+    private boolean shouldDegradeToOffline(Throwable t) {
+        if (t instanceof CallNotPermittedException) {
+            return true; // Circuito abierto en Resilience4j
+        }
+        Throwable rootCause = t.getCause() != null ? t.getCause() : t;
 
-        // Generamos un UUID temporal.
-        return UUID.randomUUID();
+        // Errores 4xx (p. ej. HttpClientErrorException.BadRequest o Conflict) NO deben
+        // degradar
+        if (rootCause instanceof HttpClientErrorException) {
+            return false;
+        }
+
+        // Degradamos si es fallo de red/timeout o error 5xx del servidor
+        return rootCause instanceof ResourceAccessException
+                || rootCause instanceof HttpServerErrorException
+                || t instanceof TicketServiceException;
     }
-}
+
+} 
+
+
+    
+
+    
+    
+
+    
+    
+    
+    
+    
+
+    
