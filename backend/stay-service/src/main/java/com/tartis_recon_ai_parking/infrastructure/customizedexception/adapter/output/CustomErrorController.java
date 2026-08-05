@@ -9,6 +9,7 @@ import org.springframework.boot.webmvc.error.ErrorController;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -35,7 +36,9 @@ public class CustomErrorController implements ErrorController {
 
     private static final Logger log = LoggerFactory.getLogger(CustomErrorController.class);
 
-    @RequestMapping("/error")
+    @RequestMapping(value = "/error", method = {
+            RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+            RequestMethod.DELETE, RequestMethod.PATCH})
     public ResponseEntity<ErrorResponse> error(HttpServletRequest request) {
         Integer rawStatus = (Integer) request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
         HttpStatus status = HttpStatus.resolve(rawStatus == null ? 500 : rawStatus);
@@ -48,8 +51,11 @@ public class CustomErrorController implements ErrorController {
 
         if (status.is5xxServerError()) {
             Object error = request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
-            log.error("Fallo no controlado por el advice en {} (via /error)", path,
-                    error instanceof Throwable t ? t : null);
+            if (error instanceof Throwable t) {
+                log.error("Fallo no controlado por el advice en {} (via /error)", path, t);
+            } else {
+                log.error("Fallo no controlado por el advice en {} (via /error)", path);
+            }
         }
 
         ErrorResponse body = new ErrorResponse(

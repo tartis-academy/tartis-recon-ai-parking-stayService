@@ -214,6 +214,25 @@ class CustomizedExceptionAdapterTest {
         assertEquals("/v1/stays/check-in", response.getBody().path());
     }
 
+    @Test
+    @DisplayName("handleCircuitOpen: circuito abierto (RES-05) devuelve 503, no 500")
+    void handleCircuitOpen_buildsServiceUnavailable() {
+        // Circuito real forzado a OPEN para obtener una CallNotPermittedException
+        // autentica, en vez de mockearla: es la misma excepcion que veria el
+        // check-out cuando el circuito de tariffService esta abierto.
+        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("tariffService");
+        circuitBreaker.transitionToOpenState();
+        CallNotPermittedException ex =
+                CallNotPermittedException.createCallNotPermittedException(circuitBreaker);
+        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
+
+        ResponseEntity<ErrorResponse> response = adapter.handleCircuitOpen(ex, request);
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        assertEquals("/v1/stays/check-out", response.getBody().path());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
+    }
+
     // ============================================================
     // Rupturas de base de datos (escenarios de ruptura BD)
     // ============================================================
@@ -254,7 +273,7 @@ class CustomizedExceptionAdapterTest {
 
     @Test
     @DisplayName("handleUnexpected: la red de seguridad devuelve 500 con mensaje generico y sin detalle interno")
-    void handleUnexpected_buildsGeneric500WithoutLeakingDetail() throws Exception {
+    void handleUnexpected_buildsGeneric500WithoutLeakingDetail() {
         when(request.getRequestURI()).thenReturn("/v1/stays/check-in");
 
         ResponseEntity<ErrorResponse> response =
@@ -317,25 +336,6 @@ class CustomizedExceptionAdapterTest {
 
         assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.getStatusCode());
         assertEquals("Metodo HTTP no permitido para esta ruta: GET", response.getBody().message());
-    }
-
-    @Test
-    @DisplayName("handleCircuitOpen: circuito abierto (RES-05) devuelve 503, no 500")
-    void handleCircuitOpen_buildsServiceUnavailable() {
-        // Circuito real forzado a OPEN para obtener una CallNotPermittedException
-        // autentica, en vez de mockearla: es la misma excepcion que veria el
-        // check-out cuando el circuito de tariffService esta abierto.
-        CircuitBreaker circuitBreaker = CircuitBreaker.ofDefaults("tariffService");
-        circuitBreaker.transitionToOpenState();
-        CallNotPermittedException ex =
-                CallNotPermittedException.createCallNotPermittedException(circuitBreaker);
-        when(request.getRequestURI()).thenReturn("/v1/stays/check-out");
-
-        ResponseEntity<ErrorResponse> response = adapter.handleCircuitOpen(ex, request);
-
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-        assertEquals("/v1/stays/check-out", response.getBody().path());
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE.value(), response.getBody().status());
     }
 
     private static RuntimeException instantiate(Class<? extends RuntimeException> type) {

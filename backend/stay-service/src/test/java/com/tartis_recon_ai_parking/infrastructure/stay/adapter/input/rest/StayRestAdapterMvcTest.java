@@ -42,7 +42,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -286,7 +285,7 @@ class StayRestAdapterMvcTest {
         StayDTO dto = new StayDTO(
                 stayId, UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(),
                 Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
-        when(listStaysUseCase.execute(eq(StayStatus.IN_PROGRESS), eq(0), eq(20)))
+        when(listStaysUseCase.execute(StayStatus.IN_PROGRESS, 0, 20))
                 .thenReturn(new StayPageDTO(List.of(dto), 0, 20, 1L, 1));
 
         mockMvc.perform(get("/v1/stays")
@@ -306,7 +305,7 @@ class StayRestAdapterMvcTest {
     @Test
     @DisplayName("GET /v1/stays sin params -> 200 usando page=0 size=20 y sin filtro de status")
     void listStays_defaults_returns200() throws Exception {
-        when(listStaysUseCase.execute(eq(null), eq(0), eq(20)))
+        when(listStaysUseCase.execute(null, 0, 20))
                 .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
@@ -391,7 +390,7 @@ class StayRestAdapterMvcTest {
     @Test
     @DisplayName("GET /v1/stays?size=1000000 -> se recorta al tope (100) sin disparar una consulta enorme")
     void listStays_hugeSize_capsAtMax() throws Exception {
-        when(listStaysUseCase.execute(eq(null), eq(0), eq(100)))
+        when(listStaysUseCase.execute(null, 0, 100))
                 .thenReturn(new StayPageDTO(List.of(), 0, 100, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
@@ -524,7 +523,7 @@ class StayRestAdapterMvcTest {
     @Test
     @DisplayName("OPERARIO: Debe permitir listar todas las estancias (200)")
     void shouldAllowListStaysForOperario() throws Exception {
-        when(listStaysUseCase.execute(eq(null), eq(0), eq(20)))
+        when(listStaysUseCase.execute(null, 0, 20))
                 .thenReturn(new StayPageDTO(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/v1/stays")
