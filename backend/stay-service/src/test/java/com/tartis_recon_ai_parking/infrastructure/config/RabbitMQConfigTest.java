@@ -78,6 +78,27 @@ class RabbitMQConfigTest {
     }
 
     @Test
+    void shouldCreateVehicleChangedQueueWithDeadLetterArguments() {
+        Queue queue = config.vehicleChangedQueue();
+
+        assertEquals(RabbitMQConfig.VEHICLE_CHANGED_QUEUE, queue.getName());
+        assertEquals(RabbitMQConfig.DLX_EXCHANGE, queue.getArguments().get("x-dead-letter-exchange"));
+        assertEquals(RabbitMQConfig.ROUTING_KEY_VEHICLE_CHANGED, queue.getArguments().get("x-dead-letter-routing-key"));
+    }
+
+    @Test
+    void shouldBindVehicleChangedQueueToSharedExchangeWithItsRoutingKey() {
+        Queue queue = config.vehicleChangedQueue();
+        TopicExchange exchange = config.parkingEventsExchange();
+
+        Binding binding = config.bindingVehicleChanged(queue, exchange);
+
+        assertEquals(RabbitMQConfig.EXCHANGE_NAME, binding.getExchange());
+        assertEquals(RabbitMQConfig.VEHICLE_CHANGED_QUEUE, binding.getDestination());
+        assertEquals(RabbitMQConfig.ROUTING_KEY_VEHICLE_CHANGED, binding.getRoutingKey());
+    }
+
+    @Test
     void shouldCreateDeadLetterExchangeAndQueuesBoundToOriginalRoutingKeys() {
         TopicExchange dlx = config.stayServiceEventsDLX();
         assertEquals(RabbitMQConfig.DLX_EXCHANGE, dlx.getName());
@@ -91,6 +112,11 @@ class RabbitMQConfigTest {
         Binding spotDlqBinding = config.bindingSpotStatusChangedDLQ(spotDlq, dlx);
         assertEquals(RabbitMQConfig.SPOT_STATUS_CHANGED_DLQ, spotDlq.getName());
         assertEquals(RabbitMQConfig.ROUTING_KEY_SPOT_STATUS_CHANGED, spotDlqBinding.getRoutingKey());
+
+        Queue vehicleDlq = config.vehicleChangedDLQ();
+        Binding vehicleDlqBinding = config.bindingVehicleChangedDLQ(vehicleDlq, dlx);
+        assertEquals(RabbitMQConfig.VEHICLE_CHANGED_DLQ, vehicleDlq.getName());
+        assertEquals(RabbitMQConfig.ROUTING_KEY_VEHICLE_CHANGED, vehicleDlqBinding.getRoutingKey());
     }
 
     @Test
