@@ -1,5 +1,6 @@
 package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.output.client;
 
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
@@ -18,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withRawStatus;
@@ -56,7 +58,7 @@ void shouldGetOrCreateVehicle() {
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
-    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY);
 
     // THEN
     assertNotNull(vehicleInfo);
@@ -78,7 +80,7 @@ void shouldThrowVehicleServiceException_whenGetOrCreateVehicleGetFails() {
 
     // WHEN & THEN: no debe colarse la RestClientException cruda
     VehicleServiceException ex = assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     assertThat(ex.getCause()).isNotNull();
     server.verify();
 }
@@ -95,7 +97,7 @@ void shouldThrowVehicleServiceException_whenGetOrCreateVehiclePostFails() {
 
     // WHEN & THEN
     VehicleServiceException ex = assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     assertThat(ex.getCause()).isNotNull();
     server.verify();
 }
@@ -109,7 +111,7 @@ void shouldThrowInvalidStayException_whenPlateRejectedOnLookup() {
 
     // WHEN & THEN: dato de entrada invalido, no "servicio no disponible"
     assertThrows(InvalidStayException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
@@ -125,7 +127,7 @@ void shouldThrowInvalidStayException_whenPlateRejectedOnCreate() {
 
     // WHEN & THEN
     assertThrows(InvalidStayException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
@@ -153,11 +155,102 @@ void shouldCreateVehicleWhenNotFoundByPlate() {
             .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
     // WHEN
-    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+    StayVehiclePort.VehicleInfo vehicleInfo = stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY);
 
     // THEN
     assertNotNull(vehicleInfo);
     assertEquals(expectedVehicleId, vehicleInfo.vehicleId());
+    server.verify();
+}
+
+@Test
+void shouldSendOptionalAttributesOnCreation() {
+    // GIVEN
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(UUID.randomUUID());
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.plate").value("1234ABC"))
+            .andExpect(jsonPath("$.type").value("CAR"))
+            .andExpect(jsonPath("$.brand").value("Seat"))
+            .andExpect(jsonPath("$.model").value("Ibiza"))
+            .andExpect(jsonPath("$.color").value("Rojo"))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    stayVehicleClientAdapter.getOrCreateVehicle(
+            "1234ABC", VehicleType.CAR, new VehicleAttributes("Seat", "Ibiza", "Rojo"));
+
+    // THEN
+    server.verify();
+}
+
+@Test
+void shouldOmitAbsentOrBlankAttributesOnCreation() {
+    // GIVEN
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(UUID.randomUUID());
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withRawStatus(404));
+
+    // El totem manda "" en los campos que el operario no rellena; vehicle-service
+    // los rechazaria con 400, asi que no deben viajar.
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.plate").value("1234ABC"))
+            .andExpect(jsonPath("$.brand").doesNotExist())
+            .andExpect(jsonPath("$.model").doesNotExist())
+            .andExpect(jsonPath("$.color").doesNotExist())
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    stayVehicleClientAdapter.getOrCreateVehicle(
+            "1234ABC", VehicleType.CAR, new VehicleAttributes("  ", null, ""));
+
+    // THEN
+    server.verify();
+}
+
+@Test
+void shouldNotCreateVehicleWhenItAlreadyExists() {
+    // GIVEN
+    String jsonResponse = """
+            {
+                "uniqueId": "%s",
+                "plate": "1234ABC",
+                "type": "CAR",
+                "active": true
+            }
+            """.formatted(UUID.randomUUID());
+
+    server.expect(requestTo("http://vehicle-service:8080/v1/vehicles/plate/1234ABC"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
+
+    // WHEN
+    stayVehicleClientAdapter.getOrCreateVehicle(
+            "1234ABC", VehicleType.CAR, new VehicleAttributes("Seat", "Ibiza", "Rojo"));
+
+    // THEN: server.verify() falla si se ha lanzado el POST de alta.
     server.verify();
 }
 
@@ -316,7 +409,7 @@ void shouldFallbackToRequestedTypeWhenResponseTypeMissing() {
 
     // WHEN
     StayVehiclePort.VehicleInfo vehicleInfo =
-            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.MOTORBIKE);
+            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.MOTORBIKE, VehicleAttributes.EMPTY);
 
     // THEN
     assertEquals(VehicleType.MOTORBIKE, vehicleInfo.vehicleType());
@@ -341,7 +434,7 @@ void shouldFallbackToRequestedPlateWhenResponsePlateMissing() {
 
     // WHEN
     StayVehiclePort.VehicleInfo vehicleInfo =
-            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR);
+            stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY);
 
     // THEN
     assertEquals("1234ABC", vehicleInfo.plate());
@@ -361,7 +454,7 @@ void shouldThrowVehicleServiceException_whenLookupUnauthorized() {
             .andRespond(withRawStatus(401));
 
     VehicleServiceException ex = assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
 
     assertThat(ex.getMessage()).contains("credenciales");
     server.verify();
@@ -374,7 +467,7 @@ void shouldThrowVehicleServiceException_whenLookupForbidden() {
             .andRespond(withRawStatus(403));
 
     assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 
@@ -388,7 +481,7 @@ void shouldThrowVehicleServiceException_whenCreateUnauthorized() {
             .andRespond(withRawStatus(401));
 
     assertThrows(VehicleServiceException.class,
-            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR));
+            () -> stayVehicleClientAdapter.getOrCreateVehicle("1234ABC", VehicleType.CAR, VehicleAttributes.EMPTY));
     server.verify();
 }
 

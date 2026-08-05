@@ -245,6 +245,10 @@ paths:
         - name: size
           in: query
           required: false
+          description: >
+            Number of stays per page. Values above 100 are silently capped at
+            100: each row triggers a look-up of its plate against
+            vehicle-service (N+1), so larger pages would amplify that cost.
           schema:
             type: integer
             default: 20
@@ -364,6 +368,21 @@ components:
           description: >
             Required only if the vehicle is not registered (auto-registration).
             If it already exists, it is resolved via StayVehiclePort.
+        brand:
+          type: string
+          example: "Seat"
+          description: >
+            Only used on auto-registration: forwarded to vehicle-service when the
+            plate is not registered yet. Ignored if the vehicle already exists.
+            Blank is treated as absent; vehicle-service then defaults it.
+        model:
+          type: string
+          example: "Ibiza"
+          description: Same handling as brand.
+        color:
+          type: string
+          example: "Rojo"
+          description: Same handling as brand.
 
     EntryTicket:
       type: object
