@@ -1,11 +1,12 @@
 package com.tartis_recon_ai_parking.infrastructure.config;
 
-import java.time.Duration;
 import java.util.UUID;
 
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
@@ -82,22 +83,49 @@ public class BeanConfiguration {
         return manager;
     }
 
+    /**
+     * RES-06: builder por defecto para las integraciones internas (spot,
+     * tariff, ticket). Connect y read timeout explicitos, ahora leidos de
+     * configuracion ({@code services.rest-client.*}) en vez de hardcodeados.
+     *
+     * <p>Es {@link Primary} porque tres de los cuatro adaptadores lo inyectan
+     * sin cualificador; el de vehiculo usa {@link #vehicleRestClientBuilder}.
+     */
     @Bean
-    public RestClient.Builder restClientBuilder(OAuth2AuthorizedClientManager authorizedClientManager) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    @Primary
+    public RestClient.Builder restClientBuilder(
+            OAuth2AuthorizedClientManager authorizedClientManager,
+            @Value("${services.rest-client.connect-timeout-ms:3000}") long connectTimeoutMs,
+            @Value("${services.rest-client.read-timeout-ms:5000}") long readTimeoutMs) {
+        return restClientBuilderWith(authorizedClientManager, connectTimeoutMs, readTimeoutMs);
+    }
 
-        // Timeout de conexión: tiempo máximo para conectar con el microservicio (3 segundos)
-        requestFactory.setConnectTimeout((int) Duration.ofSeconds(3).toMillis());
+    /**
+     * RES-06 (deuda Fase I): builder especifico para vehicle-service, que en la
+     * ruta sincrona de check-in consulta a un proveedor EXTERNO de datos de
+     * vehiculo, mas lento que los servicios internos. Comparte el connect
+     * timeout, pero usa un read timeout propio y mas holgado
+     * ({@code services.rest-client.vehicle.read-timeout-ms}) para no cortar
+     * consultas legitimas que tardan mas que el resto de integraciones.
+     */
+    @Bean
+    public RestClient.Builder vehicleRestClientBuilder(
+            OAuth2AuthorizedClientManager authorizedClientManager,
+            @Value("${services.rest-client.connect-timeout-ms:3000}") long connectTimeoutMs,
+            @Value("${services.rest-client.vehicle.read-timeout-ms:8000}") long vehicleReadTimeoutMs) {
+        return restClientBuilderWith(authorizedClientManager, connectTimeoutMs, vehicleReadTimeoutMs);
+    }
 
-        // Timeout de lectura: tiempo máximo esperando la respuesta (5 segundos)
-        requestFactory.setReadTimeout((int) Duration.ofSeconds(5).toMillis());
-
-        // Los cuatro adaptadores de salida (StayVehicleClientAdapter y
-        // companeros) construyen su RestClient a partir de este builder, asi
-        // que el interceptor cubre las cuatro integraciones de una vez. Si
-        // manana aparece una quinta, queda cubierta sin tocar nada.
+    /**
+     * Construye un {@code RestClient.Builder} con los timeouts dados y los
+     * interceptores comunes (token de servicio + correlacion GW-06), para que
+     * ambos beans compartan exactamente la misma cadena y solo difieran en el
+     * read timeout.
+     */
+    private RestClient.Builder restClientBuilderWith(OAuth2AuthorizedClientManager authorizedClientManager,
+                                                     long connectTimeoutMs, long readTimeoutMs) {
         return RestClient.builder()
-                .requestFactory(requestFactory)
+                .requestFactory(timeoutRequestFactory(connectTimeoutMs, readTimeoutMs))
                 .requestInterceptor(bearerTokenInterceptor(authorizedClientManager))
                 // GW-06: sin esto la cadena de trazas se corta en el primer
                 // salto. Va DESPUES del de token a proposito: si Keycloak
@@ -105,6 +133,19 @@ public class BeanConfiguration {
                 // a mandar cabecera de correlacion a un sitio al que no vamos
                 // a llamar.
                 .requestInterceptor(tracingContextInterceptor());
+    }
+
+    /**
+     * RES-06: fabrica el {@link SimpleClientHttpRequestFactory} con los timeouts
+     * indicados en milisegundos. Extraido y con visibilidad de paquete para que
+     * el test pueda verificar que los valores configurados se aplican de verdad,
+     * sin levantar un servidor.
+     */
+    static SimpleClientHttpRequestFactory timeoutRequestFactory(long connectTimeoutMs, long readTimeoutMs) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout((int) connectTimeoutMs);
+        requestFactory.setReadTimeout((int) readTimeoutMs);
+        return requestFactory;
     }
 
     /**
