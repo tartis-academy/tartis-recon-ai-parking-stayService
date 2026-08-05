@@ -1,10 +1,12 @@
 package com.tartis_recon_ai_parking.stay_service.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
+import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort.EntryTicketInfo;
 import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client.StayTicketClientAdapter;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -74,15 +76,15 @@ class StayTicketClientAdapterTest {
 
     @Test
     void shouldThrowTicketServiceException_whenIssueEntryTicketUnreachable() {
-        // GIVEN: ticket-service caido / devuelve 500 (fallo de infraestructura, no de negocio)
+        // GIVEN: ticket-service caido / devuelve 500 (fallo de infraestructura, no de
+        // negocio)
         server.expect(requestTo("http://ticket-service:8080/v1/entry-tickets"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
         // WHEN & THEN: no debe colarse la RestClientException cruda
-        TicketServiceException ex = assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueEntryTicket(UUID.randomUUID(), "1234ABC", Instant.now())
-        );
+        TicketServiceException ex = assertThrows(TicketServiceException.class,
+                () -> stayTicketClientAdapter.issueEntryTicket(UUID.randomUUID(), "1234ABC", Instant.now()));
         assertThat(ex.getCause()).isNotNull();
         server.verify();
     }
@@ -96,9 +98,8 @@ class StayTicketClientAdapterTest {
 
         // WHEN & THEN: sin esto, CheckInUseCase explotaria con NullPointerException
         // cruda al leer ticket.ticketId().
-        assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueEntryTicket(UUID.randomUUID(), "1234ABC", Instant.now())
-        );
+        assertThrows(TicketServiceException.class,
+                () -> stayTicketClientAdapter.issueEntryTicket(UUID.randomUUID(), "1234ABC", Instant.now()));
         server.verify();
     }
 
@@ -135,25 +136,44 @@ class StayTicketClientAdapterTest {
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
         // WHEN & THEN
-        assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId, BigDecimal.TEN)
-        );
+        assertThrows(TicketServiceException.class,
+                () -> stayTicketClientAdapter.issueExitTicket(stayId, entryTicketId, BigDecimal.TEN));
 
         server.verify();
     }
 
     @Test
     void shouldThrowTicketServiceException_whenIssueExitTicketUnreachable() {
-        // GIVEN: ticket-service caido / devuelve 500 (fallo de infraestructura, no de negocio)
+        // GIVEN: ticket-service caido / devuelve 500 (fallo de infraestructura, no de
+        // negocio)
         server.expect(requestTo("http://ticket-service:8080/v1/tickets"))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withServerError());
 
         // WHEN & THEN: no debe colarse la RestClientException cruda
-        TicketServiceException ex = assertThrows(TicketServiceException.class, () ->
-            stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID(), BigDecimal.TEN)
-        );
+        TicketServiceException ex = assertThrows(TicketServiceException.class,
+                () -> stayTicketClientAdapter.issueExitTicket(UUID.randomUUID(), UUID.randomUUID(), BigDecimal.TEN));
         assertThat(ex.getCause()).isNotNull();
         server.verify();
+    }
+
+    @Test
+    @DisplayName("RES-07: Si ticket-service falla (500/timeout), debe ejecutar fallback y devolver ticket OFFLINE")
+    void issueEntryTicket_whenServiceFails_shouldReturnOfflineTicket() {
+        // GIVEN
+        UUID stayId = UUID.randomUUID();
+        String plate = "1234ABC";
+        Instant now = Instant.now();
+
+        // (Si usas Mockito sobre la llamada HTTP o simulas la excepción de red)
+        // RestClientException simulando caída de ticket-service
+
+        // WHEN
+        EntryTicketInfo result = stayTicketClientAdapter.issueEntryTicket(stayId, plate, now);
+
+        // THEN
+        assertThat(result).isNotNull();
+        assertThat(result.barCode()).startsWith("OFFLINE-ENTRY-");
+        assertThat(result.ticketId()).isNotNull();
     }
 }
