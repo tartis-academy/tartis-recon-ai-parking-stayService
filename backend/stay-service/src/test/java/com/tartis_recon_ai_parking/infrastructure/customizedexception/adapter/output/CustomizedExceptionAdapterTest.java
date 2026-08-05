@@ -35,8 +35,12 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.method.annotation.ExceptionHandlerMethodResolver;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.UUID;
 
@@ -282,6 +286,30 @@ class CustomizedExceptionAdapterTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals("Ha ocurrido un error inesperado", response.getBody().message());
         assertFalse(containsInternalDetail(response));
+    }
+
+    @Test
+    @DisplayName("una desconexion de cliente SSE la trata su handler, no la red de seguridad")
+    void asyncRequestNotUsable_resolvesToDedicatedHandler() {
+        ExceptionHandlerMethodResolver resolver =
+                new ExceptionHandlerMethodResolver(CustomizedExceptionAdapter.class);
+
+        Method resolved = resolver.resolveMethod(
+                new AsyncRequestNotUsableException("Servlet container error notification for disconnected client",
+                        new IOException("Broken pipe")));
+
+        assertEquals("handleClientDisconnected", resolved.getName());
+        // void = no intenta escribir ErrorResponse sobre una respuesta text/event-stream
+        assertEquals(void.class, resolved.getReturnType());
+    }
+
+    @Test
+    @DisplayName("handleClientDisconnected: no lanza y no devuelve cuerpo")
+    void handleClientDisconnected_doesNotThrow() {
+        when(request.getRequestURI()).thenReturn("/v1/events");
+
+        adapter.handleClientDisconnected(
+                new AsyncRequestNotUsableException("disconnected client"), request);
     }
 
     // ============================================================
