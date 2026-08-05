@@ -14,6 +14,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
+import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 
 import java.util.function.Predicate;
 
@@ -105,6 +107,14 @@ class CircuitBreakerConfigurationTest {
 
         assertThat(tariff.test(new TariffServiceException("tariff-service no responde"))).isTrue();
         assertThat(tariff.test(new NoActiveTariffException("sin tarifa activa"))).isFalse();
+
+        Predicate<Throwable> vehicle = circuitBreakerRegistry
+                .circuitBreaker("vehicleService")
+                .getCircuitBreakerConfig()
+                .getRecordExceptionPredicate();
+
+        assertThat(vehicle.test(new VehicleServiceException("vehicle-service no responde"))).isTrue();
+        assertThat(vehicle.test(new InvalidStayException("matricula invalida"))).isFalse();
     }
 
     /**
