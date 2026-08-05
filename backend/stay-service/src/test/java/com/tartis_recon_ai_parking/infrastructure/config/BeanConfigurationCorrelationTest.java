@@ -61,7 +61,10 @@ class BeanConfigurationCorrelationTest {
         OAuth2AuthorizedClientManager manager = mock(OAuth2AuthorizedClientManager.class);
         when(manager.authorize(any())).thenReturn(authorizedClient);
 
-        RestClient.Builder builder = new BeanConfiguration().restClientBuilder(manager);
+        // RES-06: restClientBuilder ahora recibe los timeouts (connect, read) en ms.
+        // Aqui el test solo comprueba la propagacion del correlation-id (GW-06),
+        // asi que los valores concretos son irrelevantes; se pasan los por defecto.
+        RestClient.Builder builder = new BeanConfiguration().restClientBuilder(manager, 3000L, 5000L);
         server = MockRestServiceServer.bindTo(builder).build();
         restClient = builder.build();
     }
