@@ -32,6 +32,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -335,6 +336,17 @@ public class CustomizedExceptionAdapter {
      * seguro, nunca la excepcion real. Es lo que garantiza que el navegador
      * jamas vea una respuesta sin traducir (texto plano / stack trace crudo).
      */
+    // Desconexion normal de un cliente SSE (navegar, recargar, cerrar pestana), no un
+    // error: la red de seguridad de abajo intentaria escribir un ErrorResponse sobre una
+    // respuesta ya negociada como text/event-stream y fallaria al no haber converter.
+    // Devuelve void a proposito: marca la excepcion como tratada sin escribir nada.
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnected(AsyncRequestNotUsableException ex,
+                                         HttpServletRequest request) {
+        log.debug("Cliente desconectado de {} antes de cerrar la respuesta asincrona: {}",
+                request.getRequestURI(), ex.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Excepcion no controlada en {}", request.getRequestURI(), ex);
