@@ -4,6 +4,7 @@ import com.tartis_recon_ai_parking.application.stay.dto.SpotStatusChangedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.StayClosedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
 import com.tartis_recon_ai_parking.application.stay.dto.TariffChangedEvent;
+import com.tartis_recon_ai_parking.application.stay.dto.TicketChangedEvent;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 
 import org.slf4j.Logger;
@@ -27,6 +28,7 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
     private static final String EVENT_STAY_CREATED = "stay_created";
     private static final String EVENT_TARIFF_UPDATED = "tariff_updated";
     private static final String EVENT_SPOT_STATUS_UPDATED = "spot_status_updated";
+    private static final String EVENT_TICKET_UPDATED = "ticket_updated";
 
     private final Map<UUID, SseEmitter> emitters = new ConcurrentHashMap<>();
     private final long timeoutMillis;
@@ -77,6 +79,10 @@ public class SseEmitterRegistry implements StayEventStreamPublisher {
         broadcast(EVENT_SPOT_STATUS_UPDATED, event.eventId().toString(), event);
     }
 
+    @Override
+    public void publish(TicketChangedEvent event) {
+        broadcast(EVENT_TICKET_UPDATED, event.eventId().toString(), event);
+    }
 
     // Evita que Kong/un balanceador corte la conexion por inactividad.
     @Scheduled(fixedRateString = "${sse.heartbeat.interval-ms:15000}")
