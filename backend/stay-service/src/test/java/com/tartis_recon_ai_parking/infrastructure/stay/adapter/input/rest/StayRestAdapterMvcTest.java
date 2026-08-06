@@ -151,6 +151,37 @@ class StayRestAdapterMvcTest {
                 captor.getValue().getVehicleAttributes().isEmpty());
     }
 
+    @Test
+    @DisplayName("RES-07: check-in devuelve 201 con ticket OFFLINE cuando ticket-service degrada")
+    void checkIn_withOfflineTicket_returns201() throws Exception {
+        UUID stayId = UUID.randomUUID();
+        UUID spotId = UUID.randomUUID();
+        UUID ticketId = UUID.randomUUID();
+        String plate = "1234ABC";
+
+        StayDTO stayDto = new StayDTO(
+                stayId, UUID.randomUUID(), VehicleType.CAR, spotId, UUID.randomUUID(),
+                Instant.parse("2026-07-23T08:30:00Z"), null, null, StayStatus.IN_PROGRESS);
+
+        // DTO de respuesta que genera el caso de uso tras el fallback offline
+        EntryTicketDTO offlineTicket = new EntryTicketDTO(
+                ticketId, "OFFLINE-ENTRY-" + plate, Instant.parse("2026-07-23T08:30:00Z"));
+
+        when(checkInUseCase.execute(any())).thenReturn(new CheckInResultDTO(stayDto, offlineTicket));
+
+        mockMvc.perform(post("/v1/stays/check-in")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plate\":\"" + plate + "\",\"vehicleType\":\"CAR\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.stayId").value(stayId.toString()))
+                .andExpect(jsonPath("$.plate").value(plate))
+                .andExpect(jsonPath("$.spotId").value(spotId.toString()))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.entryTicket.ticketId").value(ticketId.toString()))
+                .andExpect(jsonPath("$.entryTicket.barCode").value("OFFLINE-ENTRY-1234ABC"));
+    }
+
     private void givenCheckInSucceeds() {
         StayDTO dto = new StayDTO(
                 UUID.randomUUID(), UUID.randomUUID(), VehicleType.CAR, UUID.randomUUID(), UUID.randomUUID(),
