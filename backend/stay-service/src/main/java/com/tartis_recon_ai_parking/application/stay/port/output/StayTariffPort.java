@@ -16,5 +16,5 @@ public interface StayTariffPort {
      * es responsabilidad de tariff; stay solo aporta el tipo de vehiculo y los
      * minutos ya redondeados a su favor (RN-06).
      */
-    BigDecimal calculateAmount(VehicleType vehicleType, long totalMinutes);
+    BigDecimal calculateAmount(java.util.UUID tariffId, VehicleType vehicleType, long totalMinutes);
 }

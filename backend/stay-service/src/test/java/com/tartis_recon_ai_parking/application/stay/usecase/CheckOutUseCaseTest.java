@@ -91,7 +91,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
-        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(tariffPort.calculateAmount(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(VehicleType.CAR), org.mockito.ArgumentMatchers.eq(90L))).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
 
         CheckOutResultDTO result = useCase.execute(new StayCheckOutDTO(PLATE, null));
@@ -174,7 +174,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
-        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(tariffPort.calculateAmount(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(VehicleType.CAR), org.mockito.ArgumentMatchers.eq(90L))).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
         doThrow(new IllegalStateException("rabbitmq no disponible"))
                 .when(eventPublisher).publish(any(StayClosedEvent.class));
@@ -194,7 +194,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
-        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(tariffPort.calculateAmount(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(VehicleType.CAR), org.mockito.ArgumentMatchers.eq(90L))).thenReturn(new BigDecimal("3.00"));
         when(stayPersistence.save(any(Stay.class))).thenAnswer(inv -> inv.getArgument(0));
         doThrow(new IllegalStateException("sin clientes SSE conectados"))
                 .when(eventStreamPublisher).publish(any(StayClosedEvent.class));
@@ -217,7 +217,7 @@ class CheckOutUseCaseTest {
                 .thenReturn(Optional.of(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true)));
         when(stayPersistence.findByVehicleIdAndStatus(vehicleId, StayStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressStay()));
-        when(tariffPort.calculateAmount(VehicleType.CAR, 90L)).thenReturn(new BigDecimal("3.00"));
+        when(tariffPort.calculateAmount(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(VehicleType.CAR), org.mockito.ArgumentMatchers.eq(90L))).thenReturn(new BigDecimal("3.00"));
         // Otra peticion cerro la estancia mientras esta calculaba el importe: la
         // version ya no coincide y el bloqueo optimista corta aqui.
         when(stayPersistence.save(any(Stay.class)))
