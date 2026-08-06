@@ -29,6 +29,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
@@ -235,21 +236,28 @@ class VehicleServiceCircuitBreakerLifecycleTest {
     }
 
     @Test
-    @DisplayName("Con el circuito CERRADO y un 500, el fallback tambien se ejecuta (rama Throwable)")
-    void fallbackAlsoRunsFromTheClosedPath() {
-        // Los fallbacks de vehicle reciben Throwable, no CallNotPermittedException,
-        // asi que Resilience4j tambien les enruta las excepciones que lanza el
-        // cuerpo del metodo, no solo las de circuito abierto.
+    @DisplayName("Con el circuito CERRADO, la excepcion del cuerpo sale directa: el fallback NO se ejecuta")
+    void bodyExceptionPropagatesWithoutFallbackWhenCircuitIsClosed() {
+        // Fija el comportamiento REAL, comprobado ejecutando el test: con el
+        // circuito cerrado, Resilience4j solo enruta al fallback la
+        // CallNotPermittedException que genera el propio circuito. La excepcion
+        // que lanza el cuerpo del metodo sale tal cual, sin pasar por el.
         //
-        // Como distinguirlo, si el cuerpo y el fallback construyen el MISMO
-        // mensaje: por la causa encadenada.
-        //   - Si el fallback se ejecuta: envuelve la excepcion del cuerpo, asi
-        //     que la causa es otra VehicleServiceException.
-        //   - Si no se ejecutase y la del cuerpo saliera directa: la causa seria
-        //     la RestClientException cruda del RestClient.
+        // Se distingue por la causa encadenada, porque el cuerpo y el fallback
+        // construyen el mismo mensaje:
+        //   - cuerpo directo -> causa = HttpServerErrorException (la del RestClient)
+        //   - via fallback   -> causa = VehicleServiceException (la envolveria)
         //
-        // Deja constancia ejecutable de que el fallback NO es codigo muerto en el
-        // camino normal (revision de la PR #124).
+        // CONSECUENCIA, y es el fondo del CRITICAL de la revision de la PR #124:
+        // la rama else de los fallback de vehicle (el "if (t instanceof
+        // CallNotPermittedException) ... else ...") es inalcanzable. No cambia el
+        // comportamiento observable —ambos caminos acaban en una
+        // VehicleServiceException con el mismo mensaje— pero es codigo muerto y
+        // conviene limpiarlo en un commit aparte.
+        //
+        // Lo que NO arregla eso es quitar los try/catch: sin ellos saldria la
+        // RestClientException cruda, que no esta en record-exceptions, y el
+        // circuito dejaria de abrirse. Lo verifica circuitOpensAfterRealHttpFailures.
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT);
         assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
 
@@ -258,8 +266,8 @@ class VehicleServiceCircuitBreakerLifecycleTest {
         assertThatThrownBy(() -> adapter.findByPlate(PLATE))
                 .isInstanceOf(VehicleServiceException.class)
                 .hasMessageContaining("No se pudo contactar")
-                .as("la causa encadenada delata si paso por el fallback")
-                .hasCauseInstanceOf(VehicleServiceException.class);
+                .as("causa sin envolver = no paso por el fallback")
+                .hasCauseInstanceOf(HttpServerErrorException.class);
 
         assertThat(circuitBreaker.getState())
                 .as("un solo fallo no alcanza minimum-number-of-calls")
