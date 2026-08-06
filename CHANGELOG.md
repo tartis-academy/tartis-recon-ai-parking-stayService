@@ -5,6 +5,15 @@ All notable changes to the `stay-service` microservice will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Documentación del endpoint `GET /activeStay/{id}` (DOC-04):** el contrato OpenAPI ahora documenta la estancia activa por plaza, que existía en el adaptador REST pero no aparecía en el contrato.
+
+### Changed
+- **Contrato del stream SSE (`openapi.yml`, DOC-04):** la descripción de `GET /events` ahora enumera los eventos realmente emitidos (`stay_created`, `stay_updated`, `tariff_updated`, `spot_status_updated`, `ticket_updated`, `vehicle_updated`) y documenta el sobre común y cada payload.
+- **Versión del contrato a `2.3.0` (DOC-04):** se retira el query param `plate` de `GET /stays` (ya no estaba implementado en `listStays`), por lo que es un cambio de contrato incompatible hacia atrás; añade el path `GET /activeStay/{id}` y la documentación completa del stream.
+
 ## [1.0.0] - 2026-08-06
 
 ### Added
