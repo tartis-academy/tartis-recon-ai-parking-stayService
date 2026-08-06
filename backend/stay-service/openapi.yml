@@ -280,9 +280,10 @@ paths:
         query parameter below.
 
         Event names emitted today: `stay_created` (check-in),
-        `stay_updated` (check-out), `tariff_updated` and `spot_status_updated`.
-        ticket-service does not publish yet, so there is no ticket event on the
-        stream (see docs/adr/0001).
+        `stay_updated` (check-out), `tariff_updated`, `spot_status_updated`,
+        `ticket_updated` and `vehicle_updated`. The ticket and vehicle events
+        are forwarded from ticket-service / vehicle-service via the shared
+        exchange and re-broadcast on this stream.
       parameters:
         - name: access_token
           in: query
@@ -314,6 +315,10 @@ paths:
               vehicleType, pricePerMinute, basePrice, active)
             - `spot_status_updated` -> SpotStatusChangedEventPayload (spotId,
               vehicleType, status)
+            - `ticket_updated` -> TicketChangedEventPayload (ticketId, stayId,
+              code, issuedAt, status, amount)
+            - `vehicle_updated` -> VehicleChangedEventPayload (vehicleId, plate,
+              vehicleType, brand, model, color, numDoors, hasSidecar, active)
 
             Every event also carries an `id:` line (same value as `eventId`)
             so EventSource clients populate `Last-Event-ID` on reconnect.
@@ -515,6 +520,8 @@ components:
             - $ref: '#/components/schemas/StayClosedEventPayload'
             - $ref: '#/components/schemas/TariffChangedEventPayload'
             - $ref: '#/components/schemas/SpotStatusChangedEventPayload'
+            - $ref: '#/components/schemas/TicketChangedEventPayload'
+            - $ref: '#/components/schemas/VehicleChangedEventPayload'
           description: Event-specific payload (see the named payload schemas below)
 
     StayCreatedEventPayload:
@@ -600,6 +607,55 @@ components:
           type: string
           description: Spot state (AVAILABLE, OCCUPIED, UNAVAILABLE)
           example: "OCCUPIED"
+
+    TicketChangedEventPayload:
+      type: object
+      description: >
+        `data` of event: ticket_updated (forwarded from ticket-service via the
+        shared exchange)
+      properties:
+        ticketId:
+          type: string
+          format: uuid
+        stayId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        issuedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+        amount:
+          type: number
+          format: double
+
+    VehicleChangedEventPayload:
+      type: object
+      description: >
+        `data` of event: vehicle_updated (forwarded from vehicle-service via
+        the shared exchange)
+      properties:
+        vehicleId:
+          type: string
+          format: uuid
+        plate:
+          type: string
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        brand:
+          type: string
+        model:
+          type: string
+        color:
+          type: string
+        numDoors:
+          type: integer
+        hasSidecar:
+          type: boolean
+        active:
+          type: boolean
 
     StayPage:
       type: object
