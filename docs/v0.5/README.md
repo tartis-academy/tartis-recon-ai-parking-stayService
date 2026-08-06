@@ -23,7 +23,7 @@ En la Fase 1 (`v0.5.0`), `stay-service` actúa como el **orquestador síncrono i
 | `spotId` | `UUID` | ID de la plaza asignada | Sí |
 | `checkInAt` | `LocalDateTime` | Fecha y hora de entrada en barrera | Sí |
 | `checkOutAt` | `LocalDateTime` | Fecha y hora de salida | No |
-| `totalAmount` | `BigDecimal` | Importe total calculado | No |
+| `totalAmount` | `BigDecimal` | Importe total calculated | No |
 | `status` | `StayStatus` | Estado (`ACTIVE`, `FINISHED`) | Sí |
 
 ---
