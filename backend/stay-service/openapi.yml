@@ -20,7 +20,7 @@ info:
     CheckOutUseCase (mocked gateway), not as separate HTTP steps. The
     PAY_PENDING / PAID states remain in the domain enum for future use but are
     transient within a single check-out call.
-  version: 2.2.0
+  version: 2.3.0
   contact:
     name: TARTIS Recon-AI - Team Parking
 
@@ -269,7 +269,7 @@ paths:
         orchestrator and centralizes the stream (SSE-01): it forwards both the
         domain events it publishes itself (check-in / check-out) and the ones
         it consumes from the shared `parking-events-exchange`: tariff changes,
-        spot status changes (SSE-06).
+        spot status changes, ticket changes and vehicle changes (SSE-06).
 
         Restricted to ADMIN/OPERARIO: the broadcast is not filtered per user,
         so a USER role would see other people's plates and exit times.
