@@ -105,16 +105,17 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
         }
     }
 
+    // Firma tipada a CallNotPermittedException, mismo criterio que
+    // StaySpotClientAdapter: con Throwable, Resilience4j invocaba el fallback ante
+    // CUALQUIER excepcion, tambien las que el metodo ya habia traducido, y una
+    // matricula invalida (400 de vehicle-service) salia como 503 (STAY-105).
     private VehicleInfo getOrCreateVehicleFallback(
-            String plate, VehicleType vehicleType, VehicleAttributes attributes, Throwable t) {
-        if (t instanceof CallNotPermittedException) {
-            throw new VehicleServiceException(
-                    "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
-                            + "no se pudo verificar/crear el vehiculo " + plate,
-                    t);
-        }
+            String plate, VehicleType vehicleType, VehicleAttributes attributes,
+            CallNotPermittedException t) {
         throw new VehicleServiceException(
-                "No se pudo contactar con vehicle-service para verificar/crear el vehiculo " + plate, t);
+                "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo verificar/crear el vehiculo " + plate,
+                t);
     }
 
     @Override
@@ -139,14 +140,10 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
         }
     }
 
-     private Optional<VehicleInfo> findByPlateFallback(String plate, Throwable t) {
-        if (t instanceof CallNotPermittedException) {
-            throw new VehicleServiceException(
-                    "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
-                            + "no se pudo consultar el vehiculo " + plate, t);
-        }
+     private Optional<VehicleInfo> findByPlateFallback(String plate, CallNotPermittedException t) {
         throw new VehicleServiceException(
-                "No se pudo contactar con vehicle-service para consultar el vehiculo " + plate, t);
+                "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo consultar el vehiculo " + plate, t);
     }
 
 
@@ -209,14 +206,10 @@ public class StayVehicleClientAdapter implements StayVehiclePort {
         }
     }
 
-     private Optional<VehicleInfo> findByIdFallback(UUID vehicleId, Throwable t) {
-        if (t instanceof CallNotPermittedException) {
-            throw new VehicleServiceException(
-                    "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
-                            + "no se pudo consultar el vehiculo " + vehicleId, t);
-        }
+     private Optional<VehicleInfo> findByIdFallback(UUID vehicleId, CallNotPermittedException t) {
         throw new VehicleServiceException(
-                "No se pudo contactar con vehicle-service para consultar el vehiculo " + vehicleId, t);
+                "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo consultar el vehiculo " + vehicleId, t);
     }
 
     private static VehicleInfo toVehicleInfo(VehicleResponse response, String plate, VehicleType fallbackType) {

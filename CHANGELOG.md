@@ -5,6 +5,14 @@ All notable changes to the `stay-service` microservice will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Reenvío por SSE de los cambios de vehículo (SSE-06):** `VehicleEventListenerAdapter` consume `VehicleChangedEvent` de la cola `stay-service-vehicle-changed-queue` (routing key `vehicle-changed-v1` del exchange compartido `parking-events-exchange`) y lo retransmite por el stream unificado como `event:vehicle_updated`. Incluye DLQ propia (`stay-service-vehicle-changed-dlq`) sobre el DLX ya existente.
+
+### Changed
+- **Contrato del stream SSE (`openapi.yml`):** la descripción de `GET /events` seguía diciendo que stay-service no agregaba eventos de otros servicios, algo que dejó de ser cierto con SSE-06. Ahora enumera los eventos realmente emitidos (`stay_created`, `stay_updated`, `tariff_updated`, `spot_status_updated`, `vehicle_updated`) y documenta el sobre común de todos ellos.
+
 ## [2.0.0] - 2026-08-04
 
 ### Added
