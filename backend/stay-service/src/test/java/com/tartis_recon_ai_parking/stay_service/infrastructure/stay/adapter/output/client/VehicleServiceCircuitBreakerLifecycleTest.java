@@ -235,6 +235,40 @@ class VehicleServiceCircuitBreakerLifecycleTest {
     }
 
     @Test
+    @DisplayName("Con el circuito CERRADO y un 500, el fallback tambien se ejecuta (rama Throwable)")
+    void fallbackAlsoRunsFromTheClosedPath() {
+        // Los fallbacks de vehicle reciben Throwable, no CallNotPermittedException,
+        // asi que Resilience4j tambien les enruta las excepciones que lanza el
+        // cuerpo del metodo, no solo las de circuito abierto.
+        //
+        // Como distinguirlo, si el cuerpo y el fallback construyen el MISMO
+        // mensaje: por la causa encadenada.
+        //   - Si el fallback se ejecuta: envuelve la excepcion del cuerpo, asi
+        //     que la causa es otra VehicleServiceException.
+        //   - Si no se ejecutase y la del cuerpo saliera directa: la causa seria
+        //     la RestClientException cruda del RestClient.
+        //
+        // Deja constancia ejecutable de que el fallback NO es codigo muerto en el
+        // camino normal (revision de la PR #124).
+        CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT);
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+
+        givenVehicleServiceIsDown(ExpectedCount.once());
+
+        assertThatThrownBy(() -> adapter.findByPlate(PLATE))
+                .isInstanceOf(VehicleServiceException.class)
+                .hasMessageContaining("No se pudo contactar")
+                .as("la causa encadenada delata si paso por el fallback")
+                .hasCauseInstanceOf(VehicleServiceException.class);
+
+        assertThat(circuitBreaker.getState())
+                .as("un solo fallo no alcanza minimum-number-of-calls")
+                .isEqualTo(CircuitBreaker.State.CLOSED);
+
+        mockServer.verify();
+    }
+
+    @Test
     @DisplayName("Con el circuito abierto, findById ejecuta su fallback")
     void findByIdFallbackRuns() {
         circuitBreakerRegistry.circuitBreaker(CIRCUIT).transitionToOpenState();

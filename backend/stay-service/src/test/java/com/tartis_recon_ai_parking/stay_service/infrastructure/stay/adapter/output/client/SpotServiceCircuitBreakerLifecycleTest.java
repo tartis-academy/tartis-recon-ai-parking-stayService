@@ -31,6 +31,8 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,11 +95,23 @@ class SpotServiceCircuitBreakerLifecycleTest {
 
     /**
      * Intercepta el {@code RestClient.Builder} ANTES de que el adaptador lo use
-     * en su constructor. Mismo patron que StaySpotClientAdapterFallbackTest.
+     * en su constructor.
+     *
+     * <p>Se indexa por nombre de bean en vez de guardar un unico
+     * {@code MockRestServiceServer} estatico. Con un solo campo, cada builder
+     * procesado pisa al anterior y acabas con el del ultimo que Spring cree:
+     * hoy funcionaria de casualidad —{@code StaySpotClientAdapter} usa el
+     * builder generico— pero en cuanto alguien anada otro builder no
+     * cualificado, el mock quedaria apuntando al equivocado y el test fallaria
+     * por un motivo que no tiene nada que ver con el circuito. Mismo patron que
+     * {@code VehicleServiceCircuitBreakerLifecycleTest}.
      */
     @TestConfiguration
     static class MockServerConfig {
-        private static MockRestServiceServer mockServer;
+
+        static final String SPOT_BUILDER = "restClientBuilder";
+
+        private static final Map<String, MockRestServiceServer> SERVERS = new HashMap<>();
 
         @Bean
         public static BeanPostProcessor lifecycleRestClientBuilderPostProcessor() {
@@ -105,16 +119,24 @@ class SpotServiceCircuitBreakerLifecycleTest {
                 @Override
                 public Object postProcessBeforeInitialization(Object bean, String beanName) {
                     if (bean instanceof RestClient.Builder builder) {
-                        mockServer = MockRestServiceServer.bindTo(builder).build();
+                        SERVERS.put(beanName, MockRestServiceServer.bindTo(builder).build());
                     }
                     return bean;
                 }
             };
         }
 
+        /** El servidor ligado al builder generico, que es el que usa el adaptador de plazas. */
         @Bean
         public MockRestServiceServer lifecycleMockRestServiceServer() {
-            return mockServer;
+            MockRestServiceServer server = SERVERS.get(SPOT_BUILDER);
+            if (server == null) {
+                throw new IllegalStateException(
+                        "No se intercepto el builder '" + SPOT_BUILDER + "'. Builders vistos: "
+                                + SERVERS.keySet()
+                                + ". Si se renombro el @Bean en BeanConfiguration, actualizar SPOT_BUILDER.");
+            }
+            return server;
         }
     }
 
