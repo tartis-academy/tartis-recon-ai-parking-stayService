@@ -41,6 +41,13 @@ tags:
   - name: events
     description: Real-time notifications (Server-Sent Events, SSE-02)
 
+# Todas las operaciones requieren token JWT (bearerAuth), incluido el stream
+# SSE GET /events (ADMIN/OPERARIO). Solo el health check de actuator
+# (/actuator/health) es publico y queda fuera de este contrato. SEC-13:
+# securityScheme aplicado a nivel de documento.
+security:
+  - bearerAuth: []
+
 paths:
   /stays/check-in:
     post:
@@ -276,21 +283,23 @@ paths:
       operationId: streamEvents
       summary: Real-time event stream (SSE-02)
       description: >
-        Long-lived text/event-stream connection. Emits a `stay_updated` event
-        (payload: StayClosedEvent) whenever a stay is closed (check-out).
-        stay-service is the orchestrator and centralizes the stream (SSE-01):
-        it forwards the same domain events it already publishes to RabbitMQ,
-        it does not aggregate events published by other services.
+        Long-lived text/event-stream connection. stay-service is the
+        orchestrator and centralizes the stream (SSE-01): it forwards both the
+        domain events it publishes itself and the ones it consumes from the
+        shared `parking-events-exchange` (SSE-06).
 
         Restricted to ADMIN/OPERARIO: the broadcast is not filtered per user,
         so a USER role would see other people's plates and exit times.
 
-        Browsers' native EventSource cannot set the Authorization header, so
-        the JWT is also accepted as the `access_token` query parameter.
+        Security (SEC-13): this endpoint requires bearerAuth like the rest; the
+        difference is that, because browsers' native EventSource cannot set the
+        Authorization header, the JWT is also accepted as the `access_token`
+        query parameter below.
 
-        Today ONLY check-out emits an SSE event (`stay_updated`). Check-in does
-        not produce one yet, so integrators must not assume entry events are
-        covered (see docs/adr/0001).
+        Event names emitted today: `stay_created` (check-in), `stay_updated`
+        (check-out), `tariff_updated`, `spot_status_updated` and
+        `vehicle_updated`. ticket-service does not publish yet, so there is no
+        ticket event on the stream (see docs/adr/0001).
       parameters:
         - name: access_token
           in: query
@@ -307,17 +316,20 @@ paths:
             sends `event:connected` with `data:ok`, then a `:heartbeat` comment
             line every few seconds to keep proxies from closing the connection.
 
-            The only domain event is `event:stay_updated`, whose `data:` line is
-            the JSON of StayClosedEvent:
-            `eventId` (uuid), `type` (string, always "StayClosedEvent"),
-            `version` (string, always "v1"), `occurredAt` (date-time) and
-            `data` with `stayId` (uuid), `spotId` (uuid), `plate` (string),
-            `entryDate` (date-time), `exitDate` (date-time) and
-            `totalAmount` (number).
+            Every domain event shares the same envelope in its `data:` line:
+            `eventId` (uuid), `type` (string, the event class name), `version`
+            (string, always "v1"), `occurredAt` (date-time) and a `data` object
+            whose shape depends on the event. `event:stay_updated` carries a
+            StayClosedEvent, whose `data` holds `stayId` (uuid), `spotId`
+            (uuid), `plate` (string), `entryDate` (date-time), `exitDate`
+            (date-time) and `totalAmount` (number). `event:vehicle_updated`
+            carries a VehicleChangedEvent, whose `data` holds `vehicleId`
+            (uuid), `plate` (string), `vehicleType` (VehicleType), `brand`,
+            `model`, `color` (strings), `numDoors` (integer), `hasSidecar` and
+            `active` (booleans).
 
-            Each `event:stay_updated` also carries an `id:` line (same value as
-            `eventId`) so EventSource clients populate `Last-Event-ID` on
-            reconnect. There is no server-side event log to replay from a given
+            Every event also carries an `id:` line (same value as `eventId`)
+            so EventSource clients populate `Last-Event-ID` on reconnect. There is no server-side event log to replay from a given
             id yet — the registry only holds in-memory emitters — so a
             reconnecting client simply gets new events going forward, it does
             not recover what it missed while disconnected.
