@@ -103,7 +103,7 @@ public class CheckOutUseCase {
 
         // Unica llamada sincrona que queda: el importe tiene que ir en esta
         // misma respuesta.
-        BigDecimal amount = tariffPort.calculateAmount(stay.getVehicleType(), totalMinutes);
+        BigDecimal amount = tariffPort.calculateAmount(stay.getTariffId(), stay.getVehicleType(), totalMinutes);
 
         // finish() arrastra la version que traia la estancia leida: es lo que
         // permite que el UPDATE detecte si otro check-out se ha adelantado.
