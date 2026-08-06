@@ -349,10 +349,9 @@ components:
     StayStatus:
       type: string
       description: >
-        Stay states. PAID replaces the PIAD of the domain model (typo).
-        CANCELLED covers IN-19 and CB06 (reverse-out at entry), not present in
-        the domain model enum. PAY_PENDING / PAID are transient in Phase 1
-        (single check-out endpoint) and kept for Phase 2.
+        Stay states. CANCELLED covers IN-19 and CB06 (reverse-out at entry).
+        PAY_PENDING / PAID are transient in Phase 1 (single check-out
+        endpoint) and kept for Phase 2.
       enum: [IN_PROGRESS, PAY_PENDING, PAID, FINISHED, CANCELLED]
 
     CheckInRequest:
