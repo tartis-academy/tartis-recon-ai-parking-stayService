@@ -13,21 +13,13 @@ info:
 
     Stay STATE MACHINE (StayStatus):
       IN_PROGRESS -> FINISHED         (normal check-out, single call)
-      IN_PROGRESS -> CANCELLED        (reverse-out at entry, CB06)
+      IN_PROGRESS -> CANCELLED       (reverse-out at entry, CB06)
     FINISHED and CANCELLED are terminal and immutable (IN-19).
     NOTE: check-out is a single endpoint in Phase 1. Payment confirmation
     (RN-03) and the 10-min window (RN-04) are handled INTERNALLY in the
     CheckOutUseCase (mocked gateway), not as separate HTTP steps. The
     PAY_PENDING / PAID states remain in the domain enum for future use but are
     transient within a single check-out call.
-
-    GAP FIXED: the CANCELLED state (CB06 - vehicle reverses out before
-    crossing the entry security loop) was documented in StayStatus but had
-    no reachable endpoint. POST /stays/{stayId}/cancel below covers the
-    manual admin fallback described in CB06 for when the entry sensor fails
-    to detect the reverse-out automatically. Confirm with the team whether
-    an automatic sensor-triggered path (event/webhook) is also expected in
-    Phase 1, or if manual-only is sufficient for now.
   version: 2.2.0
   contact:
     name: TARTIS Recon-AI - Team Parking
@@ -158,24 +150,25 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /stays/{stayId}/cancel:
-    post:
+  /activeStay/{id}:
+    get:
       tags: [stays]
-      operationId: cancelStay
-      summary: >
-        Cancels a stay that never actually entered the parking (CB06:
-        vehicle reversed out before crossing the entry security loop).
-        Manual admin operation (RN-02) — fallback for when the entry
-        sensor fails to detect the reverse-out automatically.
+      operationId: getActiveStay
+      summary: Retrieves the active stay for a spot (ADMIN/OPERARIO)
       description: >
-        Releases the assigned spot (StaySpotPort) and invalidates the entry
-        ticket, then transitions the stay to CANCELLED (IN-19, terminal and
-        immutable).
+        Returns the currently active stay (status IN_PROGRESS) associated with
+        the given spot id.
       parameters:
-        - $ref: '#/components/parameters/StayIdPath'
+        - name: id
+          in: path
+          required: true
+          description: Spot id of the active stay
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
-          description: Stay cancelled, spot released
+          description: Active stay detail
           content:
             application/json:
               schema:
@@ -185,13 +178,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Stay not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: Stay is not IN_PROGRESS (already FINISHED or CANCELLED, IN-19)
+          description: No active stay for the given spot id
           content:
             application/json:
               schema:
@@ -237,11 +224,6 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/StayStatus'
-        - name: plate
-          in: query
-          required: false
-          schema:
-            type: string
         - name: page
           in: query
           required: false
@@ -285,8 +267,9 @@ paths:
       description: >
         Long-lived text/event-stream connection. stay-service is the
         orchestrator and centralizes the stream (SSE-01): it forwards both the
-        domain events it publishes itself and the ones it consumes from the
-        shared `parking-events-exchange` (SSE-06).
+        domain events it publishes itself (check-in / check-out) and the ones
+        it consumes from the shared `parking-events-exchange`: tariff changes,
+        spot status changes (SSE-06).
 
         Restricted to ADMIN/OPERARIO: the broadcast is not filtered per user,
         so a USER role would see other people's plates and exit times.
@@ -296,10 +279,10 @@ paths:
         Authorization header, the JWT is also accepted as the `access_token`
         query parameter below.
 
-        Event names emitted today: `stay_created` (check-in), `stay_updated`
-        (check-out), `tariff_updated`, `spot_status_updated` and
-        `vehicle_updated`. ticket-service does not publish yet, so there is no
-        ticket event on the stream (see docs/adr/0001).
+        Event names emitted today: `stay_created` (check-in),
+        `stay_updated` (check-out), `tariff_updated` and `spot_status_updated`.
+        ticket-service does not publish yet, so there is no ticket event on the
+        stream (see docs/adr/0001).
       parameters:
         - name: access_token
           in: query
@@ -314,25 +297,30 @@ paths:
           description: >
             text/event-stream connection established. On connect the server
             sends `event:connected` with `data:ok`, then a `:heartbeat` comment
-            line every few seconds to keep proxies from closing the connection.
+            line periodically (configurable, default 15s) to keep proxies from
+            closing the connection.
 
-            Every domain event shares the same envelope in its `data:` line:
-            `eventId` (uuid), `type` (string, the event class name), `version`
-            (string, always "v1"), `occurredAt` (date-time) and a `data` object
-            whose shape depends on the event. `event:stay_updated` carries a
-            StayClosedEvent, whose `data` holds `stayId` (uuid), `spotId`
-            (uuid), `plate` (string), `entryDate` (date-time), `exitDate`
-            (date-time) and `totalAmount` (number). `event:vehicle_updated`
-            carries a VehicleChangedEvent, whose `data` holds `vehicleId`
-            (uuid), `plate` (string), `vehicleType` (VehicleType), `brand`,
-            `model`, `color` (strings), `numDoors` (integer), `hasSidecar` and
-            `active` (booleans).
+            Every domain event shares the same envelope in its `data:` line
+            (`#/components/schemas/StayEventEnvelope`): `eventId` (uuid),
+            `type` (string, the event class name), `version` (string, always
+            "v1"), `occurredAt` (date-time) and a `data` object whose shape
+            depends on the event:
+
+            - `stay_created` -> StayCreatedEventPayload (stayId, vehicleId,
+              vehicleType, spotId, tariffId, plate, checkIn)
+            - `stay_updated` -> StayClosedEventPayload (stayId, spotId, plate,
+              entryDate, exitDate, totalAmount)
+            - `tariff_updated` -> TariffChangedEventPayload (tariffId, name,
+              vehicleType, pricePerMinute, basePrice, active)
+            - `spot_status_updated` -> SpotStatusChangedEventPayload (spotId,
+              vehicleType, status)
 
             Every event also carries an `id:` line (same value as `eventId`)
-            so EventSource clients populate `Last-Event-ID` on reconnect. There is no server-side event log to replay from a given
-            id yet — the registry only holds in-memory emitters — so a
-            reconnecting client simply gets new events going forward, it does
-            not recover what it missed while disconnected.
+            so EventSource clients populate `Last-Event-ID` on reconnect.
+            There is no server-side event log to replay from a given id yet —
+            the registry only holds in-memory emitters — so a reconnecting
+            client simply gets new events going forward, it does not recover
+            what it missed while disconnected.
           content:
             text/event-stream:
               schema:
@@ -501,6 +489,118 @@ components:
           type: number
           format: double
           nullable: true
+
+    StayEventEnvelope:
+      type: object
+      description: >
+        Shared envelope shipped in the `data:` line of every SSE event emitted
+        on GET /events (except the `connected` handshake and the `:heartbeat`
+        comment).
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          description: Event class name, e.g. StayCreatedEvent
+          example: "StayCreatedEvent"
+        version:
+          type: string
+          example: "v1"
+        occurredAt:
+          type: string
+          format: date-time
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/StayCreatedEventPayload'
+            - $ref: '#/components/schemas/StayClosedEventPayload'
+            - $ref: '#/components/schemas/TariffChangedEventPayload'
+            - $ref: '#/components/schemas/SpotStatusChangedEventPayload'
+          description: Event-specific payload (see the named payload schemas below)
+
+    StayCreatedEventPayload:
+      type: object
+      description: "`data` of event `stay_created` (emitted at check-in)"
+      properties:
+        stayId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        spotId:
+          type: string
+          format: uuid
+        tariffId:
+          type: string
+          format: uuid
+        plate:
+          type: string
+        checkIn:
+          type: string
+          format: date-time
+
+    StayClosedEventPayload:
+      type: object
+      description: "`data` of event: stay_updated (emitted at check-out)"
+      properties:
+        stayId:
+          type: string
+          format: uuid
+        spotId:
+          type: string
+          format: uuid
+        plate:
+          type: string
+        entryDate:
+          type: string
+          format: date-time
+        exitDate:
+          type: string
+          format: date-time
+        totalAmount:
+          type: number
+          format: double
+
+    TariffChangedEventPayload:
+      type: object
+      description: >
+        `data` of event: tariff_updated (forwarded from tariff-service via the
+        shared exchange)
+      properties:
+        tariffId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        pricePerMinute:
+          type: number
+          format: double
+        basePrice:
+          type: number
+          format: double
+        active:
+          type: boolean
+
+    SpotStatusChangedEventPayload:
+      type: object
+      description: >
+        `data` of event: spot_status_updated (forwarded from spot-service via
+        the shared exchange)
+      properties:
+        spotId:
+          type: string
+          format: uuid
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        status:
+          type: string
+          description: Spot state (AVAILABLE, OCCUPIED, UNAVAILABLE)
+          example: "OCCUPIED"
 
     StayPage:
       type: object
