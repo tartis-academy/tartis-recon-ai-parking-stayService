@@ -32,6 +32,9 @@ public class RabbitMQConfig {
     public static final String ROUTING_KEY_SPOT_STATUS_CHANGED = "spot-status-changed-v1";
     public static final String SPOT_STATUS_CHANGED_QUEUE = "stay-service-spot-status-changed-queue";
 
+    public static final String ROUTING_KEY_TICKET_CHANGED = "ticket-changed-v1";
+    public static final String TICKET_CHANGED_QUEUE = "stay-service-ticket-changed-queue";
+
     public static final String ROUTING_KEY_VEHICLE_CHANGED = "vehicle-changed-v1";
     public static final String VEHICLE_CHANGED_QUEUE = "stay-service-vehicle-changed-queue";
 
@@ -46,6 +49,7 @@ public class RabbitMQConfig {
     public static final String DLX_EXCHANGE = "stay-service-events-dlx";
     public static final String TARIFF_CHANGED_DLQ = "stay-service-tariff-changed-dlq";
     public static final String SPOT_STATUS_CHANGED_DLQ = "stay-service-spot-status-changed-dlq";
+    public static final String TICKET_CHANGED_DLQ = "stay-service-ticket-changed-dlq";
     public static final String VEHICLE_CHANGED_DLQ = "stay-service-vehicle-changed-dlq";
 
     // El publicador declara SOLO el exchange. Las colas de spot-service y
@@ -88,6 +92,21 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(spotStatusChangedQueue)
                 .to(parkingEventsExchange)
                 .with(ROUTING_KEY_SPOT_STATUS_CHANGED);
+    }
+
+    @Bean
+    public Queue ticketChangedQueue() {
+        return QueueBuilder.durable(TICKET_CHANGED_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
+                .withArgument("x-dead-letter-routing-key", ROUTING_KEY_TICKET_CHANGED)
+                .build();
+    }
+
+    @Bean
+    public Binding bindingTicketChanged(Queue ticketChangedQueue, TopicExchange parkingEventsExchange) {
+        return BindingBuilder.bind(ticketChangedQueue)
+                .to(parkingEventsExchange)
+                .with(ROUTING_KEY_TICKET_CHANGED);
     }
 
     @Bean
@@ -135,6 +154,18 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(spotStatusChangedDLQ)
                 .to(stayServiceEventsDLX)
                 .with(ROUTING_KEY_SPOT_STATUS_CHANGED);
+    }
+
+    @Bean
+    public Queue ticketChangedDLQ() {
+        return QueueBuilder.durable(TICKET_CHANGED_DLQ).build();
+    }
+
+    @Bean
+    public Binding bindingTicketChangedDLQ(Queue ticketChangedDLQ, TopicExchange stayServiceEventsDLX) {
+        return BindingBuilder.bind(ticketChangedDLQ)
+                .to(stayServiceEventsDLX)
+                .with(ROUTING_KEY_TICKET_CHANGED);
     }
 
     @Bean
