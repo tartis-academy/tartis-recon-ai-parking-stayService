@@ -78,6 +78,8 @@ Los casos de uso coordinan la interacción síncrona y asíncrona entre microser
 | `DB_HOST` | Host de la BD compartida de desarrollo | `localhost` | Dev |
 | `DB_PORT` | Puerto de la BD compartida | `5432` | Dev |
 | `DB_NAME` | Nombre de la BD de desarrollo | `parking_dev` | Dev |
+| `DB_USER` | Usuario de la BD de desarrollo | `parking_dev` | Dev |
+| `DB_PASSWORD` | Contraseña de la BD de desarrollo | `change.me` | Dev |
 | `STAY_DB_HOST` | Host de la BD dedicada de estancias | `parking-stay-postgres` | Prod / Aislado |
 | `STAY_DB_PORT` | Puerto del host para la BD dedicada | `5437` (externo) / `5432` (interno) | Prod / Aislado |
 | `STAY_DB_NAME` | Nombre de la BD dedicada | `stay_db` | Prod / Aislado |
@@ -103,7 +105,7 @@ mvn spring-boot:run
 ```
 
 ### Opción 2: Base de Datos Dedicada (Perfil `prod` / Contenedores Aislados)
-1. Arrancar la base de datos exclusiva PostgreSQL en el puerto `5437`:
+1. Arrancar la base de datos PostgreSQL en el puerto `5437`:
    ```bash
    cd backend/stay-service
    cp .env.example .env
@@ -116,8 +118,28 @@ mvn spring-boot:run
 
 ---
 
-## 7. Eventos en tiempo real (Server-Sent Events)
+## 7. Migraciones de base de datos (Flyway)
 
-El endpoint `GET /v1/events` (roles `ADMIN`, `OPERARIO`) mantiene un canal de transmisión `text/event-stream`.
-- **Autenticación por Query Param (RFC 6750):** `GET /v1/events?access_token=<ACCESS_TOKEN>` para clientes nativos `EventSource`.
-- **Heartbeat periódicos:** Envío de comentarios `:heartbeat` para mantener activa la conexión en proxies.
+El esquema ya no se crea a mano ni con un `schema.sql` montado como init script: `V1__init.sql` (en `backend/stay-service/src/main/resources/db/migration`) es la baseline, y Flyway la aplica solo al arrancar la app contra la BD dedicada (perfil `prod`). En dev, Flyway está desactivado (`spring.flyway.enabled=false` en `application-dev.properties`): el Postgres compartido con 5 schemas sigue gestionado por `ddl-auto=update`, fuera del alcance de esta migración.
+
+Para añadir un cambio de esquema: crea `V2__descripcion.sql` (nunca edites `V1__init.sql` una vez desplegado) en la misma carpeta, con el DDL nuevo. Flyway lo detecta y lo aplica en el siguiente arranque.
+
+---
+
+## 8. Escaneo de imagen (Trivy)
+
+El job `docker-scan` de la CI construye la imagen final del Dockerfile y la escanea con [Trivy](https://trivy.dev/). El informe completo (`CRITICAL` + `HIGH`) se publica siempre en la pestaña **Security** del repo; solo una vulnerabilidad `CRITICAL` hace fallar el job.
+
+Si una `CRITICAL` no tiene fix disponible todavía y hay que aceptar el riesgo de forma consciente, se ignora explícitamente añadiendo su CVE a un `.trivyignore` en la raíz del repo (no existe ninguno hoy).
+
+---
+
+## 9. Eventos en tiempo real (SSE)
+
+`GET /v1/events` (roles `ADMIN` u `OPERARIO`) abre una conexión `text/event-stream` de larga duración. Al conectar, el servidor manda `event:connected` con `data:ok`, y cada pocos segundos una línea de comentario `:heartbeat` para que los proxies intermedios no corten la conexión por inactividad.
+
+El evento principal de dominio es `event:stay_updated`, emitido al cerrar o actualizar una estancia. Trae:
+- `id:` — mismo valor que el `eventId` del payload; el navegador lo usa para rellenar `Last-Event-ID` si reconecta.
+- `data:` — JSON de `StayClosedEvent` (`eventId`, `type`, `version`, `occurredAt`, `data` con `stayId`, `spotId`, `plate`, `entryDate`, `exitDate`, `totalAmount`).
+
+Los navegadores no pueden enviar la cabecera `Authorization` en `EventSource`, por lo que el Access Token también se acepta mediante el parámetro de consulta `GET /v1/events?access_token=<ACCESS_TOKEN>` según la especificación RFC 6750.
