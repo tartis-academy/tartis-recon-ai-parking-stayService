@@ -119,7 +119,7 @@ class StayTariffClientAdapterTest {
                 .andRespond(withSuccess(jsonResponse, MediaType.APPLICATION_JSON));
 
         // WHEN
-        BigDecimal amount = stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L);
+        BigDecimal amount = stayTariffClientAdapter.calculateAmount(java.util.UUID.randomUUID(), VehicleType.CAR, 90L);
 
         // THEN
         assertEquals(0, amount.compareTo(new BigDecimal("2.80")));
@@ -137,7 +137,7 @@ class StayTariffClientAdapterTest {
 
         // WHEN & THEN
         assertThrows(TariffServiceException.class, () ->
-            stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L)
+            stayTariffClientAdapter.calculateAmount(java.util.UUID.randomUUID(), VehicleType.CAR, 90L)
         );
 
         server.verify();
@@ -152,7 +152,7 @@ class StayTariffClientAdapterTest {
 
         // WHEN & THEN: no debe colarse la RestClientException cruda
         TariffServiceException ex = assertThrows(TariffServiceException.class, () ->
-            stayTariffClientAdapter.calculateAmount(VehicleType.CAR, 90L)
+            stayTariffClientAdapter.calculateAmount(java.util.UUID.randomUUID(), VehicleType.CAR, 90L)
         );
         assertThat(ex.getCause()).isNotNull();
         server.verify();

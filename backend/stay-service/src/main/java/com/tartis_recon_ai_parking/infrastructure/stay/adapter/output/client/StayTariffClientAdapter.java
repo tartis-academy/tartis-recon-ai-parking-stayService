@@ -65,12 +65,12 @@ public class StayTariffClientAdapter implements StayTariffPort {
     // El nombre "tariffService" coincide con la instancia de application.yml.
     @Override
     @CircuitBreaker(name = "tariffService")
-    public BigDecimal calculateAmount(VehicleType vehicleType, long totalMinutes) {
+    public BigDecimal calculateAmount(java.util.UUID tariffId, VehicleType vehicleType, long totalMinutes) {
         CalculateAmountResponse response;
         try {
             response = restClient.post()
                     .uri("/v1/tariffs/calculate")
-                    .body(new CalculateAmountRequest(vehicleType.name(), totalMinutes))
+                    .body(new CalculateAmountRequest(tariffId, vehicleType.name(), (int) totalMinutes))
                     .retrieve()
                     .body(CalculateAmountResponse.class);
         } catch (RestClientException e) {
