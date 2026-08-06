@@ -114,8 +114,7 @@ public class StayRestAdapter {
 
     /**
      * Listado paginado de estancias (HU-08, admin). Filtro opcional por
-     * {@code status}. El filtro {@code plate} del contrato aun no es funcional:
-     * el dominio no guarda la matricula (queda diferido).
+     * {@code status}.
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERARIO')")
