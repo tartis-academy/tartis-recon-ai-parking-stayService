@@ -5,15 +5,7 @@ All notable changes to the `stay-service` microservice will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- **Reenvío por SSE de los cambios de vehículo (SSE-06):** `VehicleEventListenerAdapter` consume `VehicleChangedEvent` de la cola `stay-service-vehicle-changed-queue` (routing key `vehicle-changed-v1` del exchange compartido `parking-events-exchange`) y lo retransmite por el stream unificado como `event:vehicle_updated`. Incluye DLQ propia (`stay-service-vehicle-changed-dlq`) sobre el DLX ya existente.
-
-### Changed
-- **Contrato del stream SSE (`openapi.yml`):** la descripción de `GET /events` seguía diciendo que stay-service no agregaba eventos de otros servicios, algo que dejó de ser cierto con SSE-06. Ahora enumera los eventos realmente emitidos (`stay_created`, `stay_updated`, `tariff_updated`, `spot_status_updated`, `vehicle_updated`) y documenta el sobre común de todos ellos.
-
-## [2.0.0] - 2026-08-04
+## [1.0.0] - 2026-08-06
 
 ### Added
 - **Publicación Asíncrona de Eventos (`StayClosedEvent`):** Implementado `StayEventPublisherAdapter` enviando eventos de dominio al Exchange `stay.events` (routing key `stay.closed`) de RabbitMQ tras cada check-out para la generación de ticket y liberación de plaza en segundo plano.
@@ -39,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Protección con `@PreAuthorize`:** Control de acceso en adaptadores REST.
 - **Escaneo Continuo de Vulnerabilidades:** Pipeline CI/CD integrado con Trivy (`docker-scan`).
 
-## [1.0.0] - 2026-07-25
+## [0.5.0] - 2026-07-29
 
 ### Added
 - **MVP Inicial de `stay-service`:** Implementación inicial de la arquitectura hexagonal para la orquestación del parking.
@@ -51,5 +43,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Persistencia PostgreSQL:** Configuración JPA con esquema `stay`.
 - **Contrato OpenAPI:** Especificación en `openapi.yml`.
 
-[2.0.0]: https://github.com/tartis-academy/tartis-recon-ai-parking-stayService/compare/v1.0.0...v2.0.0
-[1.0.0]: https://github.com/tartis-academy/tartis-recon-ai-parking-stayService/releases/tag/v1.0.0
+[1.0.0]: https://github.com/tartis-academy/tartis-recon-ai-parking-stayService/compare/v0.5.0...v1.0.0
+[0.5.0]: https://github.com/tartis-academy/tartis-recon-ai-parking-stayService/releases/tag/v0.5.0
