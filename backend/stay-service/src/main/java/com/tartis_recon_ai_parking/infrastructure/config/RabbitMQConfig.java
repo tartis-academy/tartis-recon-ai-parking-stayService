@@ -51,6 +51,9 @@ public class RabbitMQConfig {
     // El publicador declara SOLO el exchange. Las colas de spot-service y
     // ticket-service las declara cada consumidor, que es quien conoce sus
     // argumentos (dead-lettering, TTL...). Declararlas aquí provocaba
+    // RES-07: RECONCILIACIÓN DE TICKETS OFFLINE (NUEVO)
+    public static final String ROUTING_KEY_ENTRY_TICKET_OFFLINE = "entry-ticket-offline-v1";
+
     // PRECONDITION_FAILED en cuanto un consumidor añadía argumentos propios.
     @Bean // Construye la oficina central de repartos (Exchange) de tipo Topic
     public TopicExchange parkingEventsExchange() {

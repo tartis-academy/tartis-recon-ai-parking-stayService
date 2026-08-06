@@ -2,7 +2,10 @@ package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
 import com.tartis_recon_ai_parking.application.stay.port.output.StayTicketPort;
 import com.tartis_recon_ai_parking.domain.stay.exception.TicketServiceException;
+import com.tartis_recon_ai_parking.infrastructure.config.RabbitMQConfig;
+import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.eventpublisher.event.EntryTicketOfflineEvent;
 
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -27,11 +30,14 @@ public class StayTicketClientAdapter implements StayTicketPort {
     private final RestClient restClient;
     private static final Logger log = LoggerFactory.getLogger(StayTicketClientAdapter.class);
     private static final String CIRCUIT_BREAKER_NAME = "ticketService";
+    private final RabbitTemplate rabbitTemplate;
 
     public StayTicketClientAdapter(
             RestClient.Builder builder,
+            RabbitTemplate rabbitTemplate,
             @Value("${services.ticket.url:http://ticket-service:8080}") String ticketServiceUrl) {
         this.restClient = builder.baseUrl(ticketServiceUrl).build();
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     /**
@@ -88,60 +94,33 @@ public class StayTicketClientAdapter implements StayTicketPort {
      * abierto,
      * se genera un ticket offline (degradación suave) para no bloquear la barrera.
      */
-    public EntryTicketInfo issueEntryTicketFallback(UUID stayId, String plate, Instant issuedAt, Throwable t) throws Throwable {
-    if (!shouldDegradeToOffline(t)) {
-        throw t;
+    public EntryTicketInfo issueEntryTicketFallback(UUID stayId, String plate, Instant issuedAt, Throwable t)
+            throws Throwable {
+       if (t instanceof HttpClientErrorException || (t.getCause() instanceof HttpClientErrorException)) {
+            throw t;
+        }
+
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String offlineCode = "OFFLINE-ENTRY-" + uniqueSuffix;
+        UUID fallbackTicketId = UUID.randomUUID();
+
+        log.warn("[RECONCILIATION-REQUIRED] RES-07 Fallback activado para stayId={}. ticket-service no disponible ({}). Generado ticket offline local ticketId={}, barCode={}.",
+                 stayId, t.getClass().getSimpleName(), fallbackTicketId, offlineCode);
+
+        // Publicación del evento para reconciliación en ticket-service cuando este se recupere
+        try {
+            EntryTicketOfflineEvent event = new EntryTicketOfflineEvent(stayId, plate, offlineCode, issuedAt);
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.EXCHANGE_NAME,
+                    RabbitMQConfig.ROUTING_KEY_ENTRY_TICKET_OFFLINE,
+                    event
+            );
+            log.info("[RECONCILIATION-QUEUED] Evento enviado a RabbitMQ para stayId={}", stayId);
+        } catch (Exception e) {
+            log.error("[RECONCILIATION-PUBLISH-FAILED] No se pudo publicar evento de reconciliación para stayId={}", stayId, e);
+        }
+
+        return new EntryTicketInfo(fallbackTicketId, offlineCode, issuedAt);
     }
 
-    // M1: Sufijo único basado en UUID para evitar colisiones y no exponer la matrícula en claro
-    String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-    String offlineCode = "OFFLINE-ENTRY-" + uniqueSuffix;
-    
-    // M2: ticketId local para la estancia degradada
-    UUID fallbackTicketId = UUID.randomUUID();
-
-    log.warn("[RECONCILIATION-REQUIRED] RES-07 Fallback activado para stayId={}. ticket-service no disponible ({}). " +
-             "Generado ticket offline local ticketId={}, barCode={}.",
-             stayId, t.getClass().getSimpleName(), fallbackTicketId, offlineCode);
-
-    return new EntryTicketInfo(fallbackTicketId, offlineCode, issuedAt);
 }
-
-    /**
-     * Evalúa si la excepción corresponde a un fallo de infraestructura o circuito
-     * abierto
-     * que justifica la degradación suave a ticket OFFLINE.
-     */
-    private boolean shouldDegradeToOffline(Throwable t) {
-        if (t instanceof CallNotPermittedException) {
-            return true; // Circuito abierto en Resilience4j
-        }
-        Throwable rootCause = t.getCause() != null ? t.getCause() : t;
-
-        // Errores 4xx (p. ej. HttpClientErrorException.BadRequest o Conflict) NO deben
-        // degradar
-        if (rootCause instanceof HttpClientErrorException) {
-            return false;
-        }
-
-        // Degradamos si es fallo de red/timeout o error 5xx del servidor
-        return rootCause instanceof ResourceAccessException
-                || rootCause instanceof HttpServerErrorException
-                || t instanceof TicketServiceException;
-    }
-
-} 
-
-
-    
-
-    
-    
-
-    
-    
-    
-    
-    
-
-    
