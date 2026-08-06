@@ -32,6 +32,7 @@ public class StayTariffClientAdapter implements StayTariffPort {
     }
 
     @Override
+    @CircuitBreaker(name = "tariffService")
     public UUID getActiveTariffId(VehicleType vehicleType) {
         List<TariffResponse> tariffs;
         try {
@@ -47,13 +48,13 @@ public class StayTariffClientAdapter implements StayTariffPort {
                     "No se pudo contactar con tariff-service para obtener la tarifa activa de "
                             + vehicleType, e);
         }
-
+ 
         if (tariffs == null || tariffs.isEmpty()) {
             // IN-08: respuesta valida de negocio, no un fallo de infraestructura.
             throw new NoActiveTariffException(
                     "No hay tarifa activa configurada para el tipo de vehículo: " + vehicleType);
         }
-
+ 
         return tariffs.get(0).id();
     }
 

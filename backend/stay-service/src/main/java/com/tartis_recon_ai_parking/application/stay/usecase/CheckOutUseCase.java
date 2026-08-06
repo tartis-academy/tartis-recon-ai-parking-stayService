@@ -92,11 +92,11 @@ public class CheckOutUseCase {
 
         VehicleInfo vehicle = vehiclePort.findByPlate(plate)
                 .orElseThrow(() -> new StayNotFoundException(
-                        "No existe ninguna estancia en curso para la matricula " + plate + " (HU-02 CA-02)"));
+                        "No existe ninguna estancia en curso para la matricula " + plate));
 
         Stay stay = stayPersistence.findByVehicleIdAndStatus(vehicle.vehicleId(), StayStatus.IN_PROGRESS)
                 .orElseThrow(() -> new StayNotFoundException(
-                        "No existe ninguna estancia en curso para la matricula " + plate + " (HU-02 CA-02)"));
+                        "No existe ninguna estancia en curso para la matricula " + plate));
 
         Instant checkOut = clock.instant();
         long totalMinutes = stay.parkedMinutesUntil(checkOut);

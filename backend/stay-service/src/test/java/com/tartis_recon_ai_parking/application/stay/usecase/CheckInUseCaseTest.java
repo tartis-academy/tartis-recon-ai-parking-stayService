@@ -3,6 +3,7 @@ package com.tartis_recon_ai_parking.application.stay.usecase;
 import com.tartis_recon_ai_parking.application.stay.dto.CheckInResultDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreateDTO;
 import com.tartis_recon_ai_parking.application.stay.dto.StayCreatedEvent;
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.factory.StayDTOFactory;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayEventStreamPublisher;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayPersistence;
@@ -137,7 +138,7 @@ class CheckInUseCaseTest {
     @DisplayName("ocupa plaza del tipo que resuelve vehicle-service, no el detectado (CA2)")
     void shouldOccupySpotOfResolvedVehicleType() {
         // El totem detecta CAR, pero el vehiculo esta registrado como MOTORBIKE.
-        when(vehiclePort.getOrCreateVehicle(PLATE, VehicleType.CAR))
+        when(vehiclePort.getOrCreateVehicle(PLATE, VehicleType.CAR, VehicleAttributes.EMPTY))
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.MOTORBIKE, true));
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.MOTORBIKE)).thenReturn(spotId);
@@ -154,7 +155,7 @@ class CheckInUseCaseTest {
     @Test
     @DisplayName("normaliza la matricula antes de resolver el vehiculo (IN-01, CB-01)")
     void shouldNormalizePlateBeforeResolving() {
-        when(vehiclePort.getOrCreateVehicle(PLATE, null))
+        when(vehiclePort.getOrCreateVehicle(PLATE, null, VehicleAttributes.EMPTY))
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, VehicleType.CAR, true));
         givenNoActiveStay();
         when(spotPort.occupySpot(VehicleType.CAR)).thenReturn(spotId);
@@ -164,7 +165,7 @@ class CheckInUseCaseTest {
 
         useCase.execute(new StayCreateDTO(" 1234 abc ", null));
 
-        verify(vehiclePort).getOrCreateVehicle(PLATE, null);
+        verify(vehiclePort).getOrCreateVehicle(PLATE, null, VehicleAttributes.EMPTY);
     }
 
     // ------------------------------------------------------------------
@@ -346,7 +347,7 @@ class CheckInUseCaseTest {
     // ------------------------------------------------------------------
 
     private void givenVehicle(VehicleType type, boolean active) {
-        when(vehiclePort.getOrCreateVehicle(eq(PLATE), any()))
+        when(vehiclePort.getOrCreateVehicle(eq(PLATE), any(), any()))
                 .thenReturn(new VehicleInfo(vehicleId, PLATE, type, active));
     }
 

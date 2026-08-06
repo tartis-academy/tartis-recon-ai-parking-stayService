@@ -1,11 +1,15 @@
 package com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.client;
 
+import com.tartis_recon_ai_parking.application.stay.dto.VehicleAttributes;
 import com.tartis_recon_ai_parking.application.stay.port.output.StayVehiclePort;
 import com.tartis_recon_ai_parking.domain.stay.VehicleType;
 import com.tartis_recon_ai_parking.domain.stay.exception.InvalidStayException;
 import com.tartis_recon_ai_parking.domain.stay.exception.VehicleServiceException;
 import com.tartis_recon_ai_parking.infrastructure.stay.adapter.output.rest.dto.VehicleResponse;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -13,6 +17,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,65 +26,100 @@ import java.util.UUID;
 public class StayVehicleClientAdapter implements StayVehiclePort {
 
     private final RestClient restClient;
+    private static final String CIRCUIT_BREAKER_NAME = "vehicleService";
 
     public StayVehicleClientAdapter(
-            RestClient.Builder builder,
+            // RES-06: builder con el read timeout propio de vehicle (proveedor
+            // externo mas lento), no el generico. Ver BeanConfiguration.
+            @Qualifier("vehicleRestClientBuilder") RestClient.Builder builder,
             @Value("${services.vehicle.url:http://vehicle-service:8080}") String vehicleServiceUrl
     ) {
         this.restClient = builder.baseUrl(vehicleServiceUrl).build();
     }
 
-
     @Override
-public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
-    VehicleResponse response;
+ @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "getOrCreateVehicleFallback")
+    public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType, VehicleAttributes attributes) {
+        VehicleResponse response;
 
-    try {
-        // 1. Consulta por matrícula
-        response = restClient.get()
-                .uri("/v1/vehicles/plate/{plate}", plate)
-                .retrieve()
-                .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
-    } catch (HttpClientErrorException.NotFound e) {
-        // 2. Si no existe (404), lo crea vía POST. 404 es una respuesta de
-        //    negocio legitima (matricula aun no registrada), no un fallo.
         try {
-            response = restClient.post()
-                    .uri("/v1/vehicles")
-                    .body(Map.of(
-                            "plate", plate,
-                            "type", vehicleType.name()
-                    ))
+            // 1. Consulta por matrícula
+            response = restClient.get()
+                    .uri("/v1/vehicles/plate/{plate}", plate)
                     .retrieve()
                     .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
-        } catch (HttpClientErrorException creationRejected) {
-            // vehicle-service valida el formato de la matricula (p.ej. longitud,
-            // caracteres) y rechaza el alta con 4xx: es un dato de entrada
-            // invalido del propio check-in, no un fallo de vehicle-service. Sin
-            // esto, una matricula mal escrita en el totem se traducia como "503
-            // servicio no disponible" en vez de "400 matricula invalida".
-            throw translateClientError(creationRejected, plate);
-        } catch (RestClientException creationFailure) {
+        } catch (HttpClientErrorException.NotFound e) {
+            // 2. Si no existe (404), lo crea vía POST. 404 es una respuesta de
+            // negocio legitima (matricula aun no registrada), no un fallo.
+            try {
+                response = restClient.post()
+                        .uri("/v1/vehicles")
+                        .body(buildCreateBody(plate, vehicleType, attributes))
+                        .retrieve()
+                        .body(VehicleResponse.class); // <-- DTO en lugar de Map.class
+            } catch (HttpClientErrorException creationRejected) {
+                // vehicle-service valida el formato de la matricula (p.ej. longitud,
+                // caracteres) y rechaza el alta con 4xx: es un dato de entrada
+                // invalido del propio check-in, no un fallo de vehicle-service. Sin
+                // esto, una matricula mal escrita en el totem se traducia como "503
+                // servicio no disponible" en vez de "400 matricula invalida".
+                throw translateClientError(creationRejected, plate);
+            } catch (RestClientException creationFailure) {
+                throw new VehicleServiceException(
+                        "No se pudo contactar con vehicle-service para dar de alta el vehiculo " + plate,
+                        creationFailure);
+            }
+        } catch (HttpClientErrorException e) {
+            // Mismo caso que arriba pero en la propia consulta (algunos vehicle-service
+            // validan el formato tambien en el GET, antes de responder 404/200).
+            throw translateClientError(e, plate);
+        } catch (RestClientException e) {
+            // vehicle-service caido, timeout, 5xx... no confundir con el 404/4xx de
+            // arriba (esos son negocio); se traduce para que el frontend reciba un
+            // ErrorResponse interpretable en vez de una excepcion de red cruda (IN-36).
             throw new VehicleServiceException(
-                    "No se pudo contactar con vehicle-service para dar de alta el vehiculo " + plate,
-                    creationFailure);
+                    "No se pudo contactar con vehicle-service para consultar el vehiculo " + plate, e);
         }
-    } catch (HttpClientErrorException e) {
-        // Mismo caso que arriba pero en la propia consulta (algunos vehicle-service
-        // validan el formato tambien en el GET, antes de responder 404/200).
-        throw translateClientError(e, plate);
-    } catch (RestClientException e) {
-        // vehicle-service caido, timeout, 5xx... no confundir con el 404/4xx de
-        // arriba (esos son negocio); se traduce para que el frontend reciba un
-        // ErrorResponse interpretable en vez de una excepcion de red cruda (IN-36).
-        throw new VehicleServiceException(
-                "No se pudo contactar con vehicle-service para consultar el vehiculo " + plate, e);
+
+        return toVehicleInfo(response, plate, vehicleType);
     }
 
-    return toVehicleInfo(response, plate, vehicleType);
-}
+    // Map.of no admite valores null, y los atributos son opcionales por contrato.
+    private static Map<String, Object> buildCreateBody(
+            String plate, VehicleType vehicleType, VehicleAttributes attributes) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("plate", plate);
+        body.put("type", vehicleType.name());
+
+        if (attributes != null) {
+            putIfPresent(body, "brand", attributes.brand());
+            putIfPresent(body, "model", attributes.model());
+            putIfPresent(body, "color", attributes.color());
+        }
+        return body;
+    }
+
+    private static void putIfPresent(Map<String, Object> body, String key, String value) {
+        if (value != null) {
+            body.put(key, value);
+        }
+    }
+
+    // Firma tipada a CallNotPermittedException, mismo criterio que
+    // StaySpotClientAdapter: con Throwable, Resilience4j invocaba el fallback ante
+    // CUALQUIER excepcion, tambien las que el metodo ya habia traducido, y una
+    // matricula invalida (400 de vehicle-service) salia como 503 (STAY-105).
+    private VehicleInfo getOrCreateVehicleFallback(
+            String plate, VehicleType vehicleType, VehicleAttributes attributes,
+            CallNotPermittedException t) {
+        throw new VehicleServiceException(
+                "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo verificar/crear el vehiculo " + plate,
+                t);
+    }
 
     @Override
+ @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "findByPlateFallback")
     public Optional<VehicleInfo> findByPlate(String plate) {
         try {
             VehicleResponse response = restClient.get()
@@ -100,19 +140,28 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
         }
     }
 
+     private Optional<VehicleInfo> findByPlateFallback(String plate, CallNotPermittedException t) {
+        throw new VehicleServiceException(
+                "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo consultar el vehiculo " + plate, t);
+    }
+
+
     /**
      * Un 401/403 de vehicle-service no es una matricula mal escrita: es que
      * stay-service no se ha autenticado bien contra el (token de servicio
      * ausente, caducado, o sin el rol que exige el endpoint).
      *
-     * <p>Antes caia en el mismo saco que el 400 de formato, asi que un fallo de
+     * <p>
+     * Antes caia en el mismo saco que el 400 de formato, asi que un fallo de
      * autenticacion llegaba al totem como <em>"La matricula '1234BCD' no es
      * valida"</em>. En la prueba E2E del 30/07 eso mando el diagnostico en la
      * direccion contraria durante un buen rato: se buscaba un problema de
      * validacion de matriculas cuando lo que pasaba era que stay no mandaba
      * ninguna cabecera Authorization.
      *
-     * <p>Se separa para que salga como 503 (igual que el resto de fallos de
+     * <p>
+     * Se separa para que salga como 503 (igual que el resto de fallos de
      * integracion, IN-36) y con un mensaje que apunta a la causa real.
      */
     private static RuntimeException translateClientError(HttpClientErrorException e, String plate) {
@@ -140,6 +189,7 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
      * asi que devuelve la misma forma de {@link VehicleResponse}.
      */
     @Override
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "findByIdFallback")
     public Optional<VehicleInfo> findById(UUID vehicleId) {
         try {
             VehicleResponse response = restClient.get()
@@ -156,6 +206,12 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
         }
     }
 
+     private Optional<VehicleInfo> findByIdFallback(UUID vehicleId, CallNotPermittedException t) {
+        throw new VehicleServiceException(
+                "vehicle-service no responde con normalidad ahora mismo (circuito abierto); "
+                        + "no se pudo consultar el vehiculo " + vehicleId, t);
+    }
+
     private static VehicleInfo toVehicleInfo(VehicleResponse response, String plate, VehicleType fallbackType) {
         if (response == null || response.uniqueId() == null) {
             // Respuesta valida en forma pero incompleta: contrato incumplido por
@@ -169,7 +225,6 @@ public VehicleInfo getOrCreateVehicle(String plate, VehicleType vehicleType) {
                 response.uniqueId(),
                 response.plate() != null ? response.plate() : plate,
                 type,
-                response.isActive()
-        );
+                response.isActive());
     }
 }

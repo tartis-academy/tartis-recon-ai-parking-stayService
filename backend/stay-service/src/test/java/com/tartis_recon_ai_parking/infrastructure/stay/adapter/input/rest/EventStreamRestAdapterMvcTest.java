@@ -84,37 +84,71 @@ class EventStreamRestAdapterMvcTest {
         verify(registry).subscribe();
     }
 
+    // Unico test que recorre la cadena real (resolver -> decoder -> @PreAuthorize):
+    // los demas happy path usan post-processors, que inyectan la Authentication y
+    // se saltan el bearerTokenResolver.
     @Test
-    @DisplayName("Debe rechazar con 401 una peticion con token invalido por query param ?jwt")
-    void shouldReturn401WhenInvalidJwtInQueryParam() throws Exception {
+    @DisplayName("Debe abrir el stream con un token valido por query param ?access_token")
+    void shouldAllowSubscriptionWithTokenInAccessTokenQueryParam() throws Exception {
+        when(registry.subscribe()).thenReturn(new SseEmitter());
+
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt
+                .withTokenValue("valid-access-token")
+                .header("alg", "none")
+                .claim("sub", UUID.randomUUID().toString())
+                .claim("realm_access", Map.of("roles", List.of("ADMIN")))
+                .build();
+
+        when(jwtDecoder.decode("valid-access-token")).thenReturn(jwt);
+
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .param("access_token", "valid-access-token")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(MockMvcResultMatchers.request().asyncStarted())
+                .andExpect(MockMvcResultMatchers.status().isOk());
+
+        verify(registry).subscribe();
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con 401 una peticion con token invalido por query param ?access_token")
+    void shouldReturn401WhenInvalidTokenInQueryParam() throws Exception {
         when(jwtDecoder.decode("invalid-token"))
                 .thenThrow(new org.springframework.security.oauth2.core.OAuth2AuthenticationException(
                         org.springframework.security.oauth2.server.resource.BearerTokenErrors
                                 .invalidToken("Invalid token")));
 
-        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).param("jwt", "invalid-token"))
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).param("access_token", "invalid-token"))
                 .andExpect(MockMvcResultMatchers.status().isUnauthorized());
         verify(registry, never()).subscribe();
     }
 
-
-
+    // SSE-08: ?jwt= (el default del plugin de Kong) no es un nombre aceptado, asi
+    // que la peticion llega sin token y cae en 401 como cualquier anonima.
     @Test
-    @DisplayName("Debe rechazar con 401 cuando se envian multiples parametros jwt")
-    void shouldReturn401WhenMultipleJwtQueryParameters() throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
-                        .param("jwt", "token-1")
-                        .param("jwt", "token-2"))
+    @DisplayName("Debe rechazar con 401 una peticion con el token en el query param ?jwt")
+    void shouldReturn401WhenTokenIsInJwtQueryParam() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH).param("jwt", "cualquier-token"))
                 .andExpect(MockMvcResultMatchers.status().isUnauthorized());
         verify(registry, never()).subscribe();
     }
 
     @Test
-    @DisplayName("Debe rechazar con 401 cuando se envia jwt y access_token simultaneamente (token smuggling)")
-    void shouldReturn401WhenBothJwtAndAccessTokenParameters() throws Exception {
+    @DisplayName("Debe rechazar con 401 cuando se envian multiples parametros access_token")
+    void shouldReturn401WhenMultipleAccessTokenQueryParameters() throws Exception {
         mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
-                        .param("jwt", "jwt-token")
-                        .param("access_token", "access-token"))
+                        .param("access_token", "token-1")
+                        .param("access_token", "token-2"))
+                .andExpect(MockMvcResultMatchers.status().isUnauthorized());
+        verify(registry, never()).subscribe();
+    }
+
+    @Test
+    @DisplayName("Debe rechazar con 401 cuando el token llega por cabecera y por query a la vez (token smuggling)")
+    void shouldReturn401WhenTokenInBothHeaderAndQueryParam() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get(SecurityConfig.SSE_PATH)
+                        .header("Authorization", "Bearer header-token")
+                        .param("access_token", "query-token"))
                 .andExpect(MockMvcResultMatchers.status().isUnauthorized());
         verify(registry, never()).subscribe();
     }

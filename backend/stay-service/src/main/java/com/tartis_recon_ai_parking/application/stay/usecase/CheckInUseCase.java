@@ -132,7 +132,8 @@ public class CheckInUseCase {
 
         // 1. Resolver el vehiculo. El puerto hace el GET /v1/vehicles/plate/{plate}
         //    y, si no existe (404), lo da de alta con POST /v1/vehicles.
-        VehicleInfo vehicle = vehiclePort.getOrCreateVehicle(plate, command.getVehicleType());
+        VehicleInfo vehicle = vehiclePort.getOrCreateVehicle(
+                plate, command.getVehicleType(), command.getVehicleAttributes());
 
         // 2. RN-11: un vehiculo dado de baja no puede entrar. Antes de tocar plaza.
         if (!vehicle.active()) {
@@ -170,13 +171,14 @@ public class CheckInUseCase {
                     tariffId,
                     clock.instant());
 
-            // 6. Ticket de entrada (HU-01 CA3) ANTES de persistir la estancia.
-            //    El id de la estancia ya existe en memoria (lo genera este caso de
-            //    uso, no la BD), asi que no hace falta esperar al save() para
-            //    emitir el ticket. De este modo, si ticket-service falla o esta
-            //    caido, la estancia nunca llega a guardarse: el catch solo tiene
-            //    que liberar la plaza y no queda una estancia huerfana en BD que
-            //    bloquee reintentos futuros del mismo vehiculo (IN-02, CB-05).
+            // 6. Ticket de entrada (HU-01 CA3, RES-07).
+            //    Se emite el ticket de entrada interactuando con ticket-service.
+            //    NOTA DE RESILIENCIA (RES-07): Si ticket-service está caído o falla,
+            //    el adaptador (StayTicketClientAdapter) NO lanza excepción; en su lugar
+            //    ejecuta un fallback que devuelve un ticket local degradado ("OFFLINE-ENTRY-{plate}").
+            //    Esto evita abortar el check-in, permite abrir la barrera y persiste la estancia en BD.
+            //    La reconciliación de las estancias con tickets OFFLINE se gestiona de forma
+            //    asíncrona (log/evento de reconciliación).
             ticket = ticketPort.issueEntryTicket(stay.getId(), plate, stay.getCheckIn());
 
             // 7. Ultima linea de defensa contra el doble check-in. Si otra
