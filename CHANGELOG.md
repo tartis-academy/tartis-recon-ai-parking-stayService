@@ -5,7 +5,7 @@ All notable changes to the `stay-service` microservice will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-08-04
+## [1.0.0] - 2026-08-06
 
 ### Added
 - **Publicación Asíncrona de Eventos (`StayClosedEvent`):** Implementado `StayEventPublisherAdapter` enviando eventos de dominio al Exchange `stay.events` (routing key `stay.closed`) de RabbitMQ tras cada check-out para la generación de ticket y liberación de plaza en segundo plano.
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Protección con `@PreAuthorize`:** Control de acceso en adaptadores REST.
 - **Escaneo Continuo de Vulnerabilidades:** Pipeline CI/CD integrado con Trivy (`docker-scan`).
 
-## [0.5.0] - 2026-07-25
+## [0.5.0] - 2026-07-29
 
 ### Added
 - **MVP Inicial de `stay-service`:** Implementación inicial de la arquitectura hexagonal para la orquestación del parking.
